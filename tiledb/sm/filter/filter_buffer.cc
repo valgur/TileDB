@@ -128,8 +128,11 @@ Status FilterBuffer::init(void* data, uint64_t nbytes) {
     return LOG_STATUS(Status::FilterError(
         "FilterBuffer error; cannot init buffer: read-only."));
 
+  // "Not-owning" constructor called -> no allocation will happen below
   tdb_shared_ptr<Buffer> buffer(tdb_new(Buffer, data, nbytes));
   offset_ = 0;
+  // YPATIA ALLOCATION HERE -> copy constructor of buffer class called by
+  // emplace_back, which mallocs conditionally
   buffers_.emplace_back(buffer);
   current_relative_offset_ = 0;
   current_buffer_ = --(buffers_.end());
@@ -151,10 +154,13 @@ Status FilterBuffer::set_fixed_allocation(void* buffer, uint64_t nbytes) {
   return Status::Ok();
 }
 
+// only used in test -> consider (re)moving
 Status FilterBuffer::copy_to(Buffer* dest) const {
   for (auto it = buffers_.cbegin(), ite = buffers_.cend(); it != ite; ++it) {
     Buffer* src = it->buffer();
     src->reset_offset();
+    // YPATIA: ALLOCATION HERE if not enough memory allocated in dest for all
+    // data
     RETURN_NOT_OK(dest->write(src->data(), src->size()));
   }
 
@@ -445,7 +451,10 @@ Status FilterBuffer::prepend_buffer(uint64_t nbytes) {
 
   if (fixed_allocation_data_ == nullptr) {
     // Normal case: realloc and prepend a new Buffer.
+    // BUFFER OBJECT ALLOCATION -> OR retrieval of buffer with already alloc'd
+    // mem
     auto buf_ptr = storage_->get_buffer();
+    // YPATIA : BUFFER ALLOCATION HAPPENING HERE
     RETURN_NOT_OK(buf_ptr->realloc(nbytes));
     buf_ptr->reset_offset();
     buf_ptr->reset_size();
@@ -551,7 +560,7 @@ Status FilterBuffer::clear() {
   offset_ = 0;
 
   // Save the raw pointers to the underlying buffers and clear the list, which
-  // decrements the ref counts.
+  // decrements the ref counts but doesn't free the underlying buffers.
   std::vector<Buffer*> buffer_ptrs;
   buffer_ptrs.reserve(buffers_.size());
   for (const auto& buf : buffers_)

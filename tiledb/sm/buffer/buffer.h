@@ -308,6 +308,7 @@ class Buffer : public BufferBase {
   /** The allocated buffer size. */
   uint64_t alloced_size_;
 
+ private:
   /**
    * Ensure that the allocation is equal to or larger than the given number of
    * bytes.

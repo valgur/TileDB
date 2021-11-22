@@ -295,6 +295,11 @@ Status Buffer::write(ConstBuffer* buff, const uint64_t nbytes) {
     return LOG_STATUS(Status::BufferError(
         "Cannot write to buffer; Buffer does not own the already stored data"));
 
+  /*
+   *  YPATIA : POSSIBLE REALLOC HERE
+   *  used in:
+   *  dd_compressor.cc
+   */
   RETURN_NOT_OK(ensure_alloced_size(offset_ + nbytes));
 
   RETURN_NOT_OK(buff->read((char*)data_ + offset_, nbytes));
@@ -310,6 +315,18 @@ Status Buffer::write(const void* buffer, const uint64_t nbytes) {
     return LOG_STATUS(Status::BufferError(
         "Cannot write to buffer; Buffer does not own the already stored data"));
 
+  /*
+   *  YPATIA : POSSIBLE REALLOC HERE
+   *  used in:
+   *  unit-filter-pipeline.cc
+   *  dd_compressor.cc
+   *  rle_compressor.cc
+   *  bit_width_reduction_filter.cc
+   *  compression_filter.cc
+   *  filter.cc
+   *  filter_pipeline.cc
+   *  positive_delta_filtering.cc
+   */
   RETURN_NOT_OK(ensure_alloced_size(offset_ + nbytes));
 
   std::memcpy((char*)data_ + offset_, buffer, nbytes);
@@ -326,6 +343,11 @@ Status Buffer::write(
     return LOG_STATUS(Status::BufferError(
         "Cannot write to buffer; Buffer does not own the already stored data"));
 
+  /*
+   *  YPATIA : POSSIBLE REALLOC HERE
+   *  used in:
+   *  dd_compressor.cc
+   */
   RETURN_NOT_OK(ensure_alloced_size(offset + nbytes));
 
   std::memcpy((char*)data_ + offset, buffer, nbytes);
