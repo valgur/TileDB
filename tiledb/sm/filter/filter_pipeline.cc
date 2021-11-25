@@ -33,6 +33,12 @@
 #include "tiledb/sm/filter/filter_pipeline.h"
 #include "tiledb/common/heap_memory.h"
 #include "tiledb/common/logger.h"
+#include "tiledb/sm/compressors/bzip_compressor.h"
+#include "tiledb/sm/compressors/dd_compressor.h"
+#include "tiledb/sm/compressors/gzip_compressor.h"
+#include "tiledb/sm/compressors/lz4_compressor.h"
+#include "tiledb/sm/compressors/rle_compressor.h"
+#include "tiledb/sm/compressors/zstd_compressor.h"
 #include "tiledb/sm/crypto/encryption_key.h"
 #include "tiledb/sm/enums/encryption_type.h"
 #include "tiledb/sm/enums/filter_type.h"
@@ -259,6 +265,69 @@ Status FilterPipeline::filter_chunks_reverse(
   }
 
   RETURN_NOT_OK(output->realloc(total_size));
+  output->set_size(total_size);
+
+  if (filters_.size() == 1 &&
+      (filters_[0]->type() == FilterType::FILTER_GZIP ||
+       filters_[0]->type() == FilterType::FILTER_ZSTD ||
+       filters_[0]->type() == FilterType::FILTER_LZ4 ||
+       filters_[0]->type() == FilterType::FILTER_RLE ||
+       filters_[0]->type() == FilterType::FILTER_BZIP2 ||
+       filters_[0]->type() == FilterType::FILTER_DOUBLE_DELTA)) {
+    // auto status = parallel_for(compute_tp, 0, input.size(), [&](uint64_t i) {
+    for (size_t i = 0; i < input.size(); i++) {
+      const auto& chunk_input = input[i];
+      const uint32_t filtered_chunk_len = std::get<1>(chunk_input);
+      const uint32_t orig_chunk_len = std::get<2>(chunk_input);
+      const uint32_t metadata_len = std::get<3>(chunk_input);
+      void* const metadata = std::get<0>(chunk_input);
+      void* const chunk_data = (char*)metadata + metadata_len;
+
+      auto chunk_buffer = ConstBuffer(chunk_data, filtered_chunk_len);
+      void* output_chunk_buffer =
+          static_cast<char*>(output->data()) + chunk_offsets[i];
+      PreallocatedBuffer output_buffer(output_chunk_buffer, orig_chunk_len);
+
+      auto cell_size = current_tile_->cell_size();
+      auto type = current_tile_->type();
+
+      // Invoke the proper decompressor
+      Status st = Status::Ok();
+      switch (filters_[0]->type()) {
+        case FilterType::FILTER_ZSTD:
+          st = ZStd::decompress(&chunk_buffer, &output_buffer);
+          break;
+        case FilterType::FILTER_GZIP:
+          st = GZip::decompress(&chunk_buffer, &output_buffer);
+          break;
+        case FilterType::FILTER_LZ4:
+          st = LZ4::decompress(&chunk_buffer, &output_buffer);
+          break;
+        case FilterType::FILTER_RLE:
+          st = RLE::decompress(cell_size, &chunk_buffer, &output_buffer);
+          break;
+        case FilterType::FILTER_BZIP2:
+          st = BZip::decompress(&chunk_buffer, &output_buffer);
+          break;
+        case FilterType::FILTER_DOUBLE_DELTA:
+          st = DoubleDelta::decompress(type, &chunk_buffer, &output_buffer);
+          break;
+        default:
+          st = Status::Error(
+              "Filter is not a compressor, go the traditional way");
+          return st;
+      }
+      RETURN_NOT_OK(st);
+    }
+    //       return Status::Ok();
+    // });
+
+    // RETURN_NOT_OK(status);
+
+    output->set_size(total_size);
+    output->reset_offset();
+    return Status::Ok();
+  }
 
   // Run each chunk through the entire pipeline.
   auto status = parallel_for(compute_tp, 0, input.size(), [&](uint64_t i) {
