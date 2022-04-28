@@ -85,6 +85,22 @@ void DictEncoding::decompress(
   }
 }
 
+uint8_t DictEncoding::compute_bytesize(uint64_t param_length) {
+  if (param_length == 0) {
+    throw std::logic_error("Cannot compute bytesize for zero length");
+  }
+
+  if (param_length <= std::numeric_limits<uint8_t>::max()) {
+    return 1;
+  } else if (param_length <= std::numeric_limits<uint16_t>::max()) {
+    return 2;
+  } else if (param_length <= std::numeric_limits<uint32_t>::max()) {
+    return 4;
+  } else {
+    return 8;
+  }
+}
+
 std::vector<std::byte> DictEncoding::serialize_dictionary(
     const span<std::string_view> dict,
     const size_t strlen_bytesize,

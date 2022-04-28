@@ -157,6 +157,7 @@ Status FilterPipeline::filter_chunks_forward(
     uint32_t chunk_size,
     std::vector<uint64_t>& chunk_offsets,
     FilteredBuffer& output,
+    FilteredBuffer& dict,
     ThreadPool* const compute_tp) const {
   bool var_sizes = chunk_offsets.size() > 0;
   uint64_t last_buffer_size = chunk_size;
@@ -306,6 +307,16 @@ Status FilterPipeline::filter_chunks_forward(
     dest_offset += metadata_size;
     // Write the chunk data
     RETURN_NOT_OK(final_stage_output_data.copy_to((char*)dest + dest_offset));
+    // assumes 1 chunk - TODO: create function
+    if (has_filter(FilterType::FILTER_DICTIONARY)) {
+      // the dict is found after the offset
+      auto dict_offset = 5 * sizeof(uint32_t) + sizeof(uint8_t);
+      dict.expand(final_stage_output_metadata.size() - dict_offset);
+      void* dest_dict = dict.data();
+      RETURN_NOT_OK(
+          final_stage_output_metadata.copy_to((char*)dest_dict, dict_offset));
+    }
+
     return Status::Ok();
   });
 
@@ -463,6 +474,7 @@ Status FilterPipeline::run_forward(
           chunk_size,
           *chunk_offsets,
           tile->filtered_buffer(),
+          tile->dictionary(),
           compute_tp),
       tile->filtered_buffer().clear());
 

@@ -376,6 +376,7 @@ class FilterPipeline {
       uint32_t chunk_size,
       std::vector<uint64_t>& chunk_offsets,
       FilteredBuffer& output,
+      FilteredBuffer& dict,
       ThreadPool* const compute_tp) const;
 
   /**

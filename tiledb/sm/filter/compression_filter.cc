@@ -457,22 +457,6 @@ CompressionFilter::create_input_view(
   return {input_view, max_str_len};
 }
 
-uint8_t CompressionFilter::compute_bytesize(uint64_t param_length) {
-  if (param_length == 0) {
-    throw std::logic_error("Cannot compute bytesize for zero length");
-  }
-
-  if (param_length <= std::numeric_limits<uint8_t>::max()) {
-    return 1;
-  } else if (param_length <= std::numeric_limits<uint16_t>::max()) {
-    return 2;
-  } else if (param_length <= std::numeric_limits<uint32_t>::max()) {
-    return 4;
-  } else {
-    return 8;
-  }
-}
-
 Status CompressionFilter::compress_var_string_coords(
     const FilterBuffer& input,
     Tile* const offsets_tile,
@@ -504,8 +488,8 @@ Status CompressionFilter::compress_var_string_coords(
                      output_strings_size;
   } else if (compressor_ == Compressor::DICTIONARY_ENCODING) {
     auto num_strings = offsets_tile->size() / constants::cell_var_offset_size;
-    max_id_bytesize = compute_bytesize(num_strings);
-    max_strlen_bytesize = compute_bytesize(max_string_len);
+    max_id_bytesize = DictEncoding::compute_bytesize(num_strings);
+    max_strlen_bytesize = DictEncoding::compute_bytesize(max_string_len);
     // Allocate for worst case dict_size when all strings unique, in format:
     // [num_of_strings|size_str1|str1|...|size_strN|strN]
     dict_size = max_strlen_bytesize * num_strings + input.size();
@@ -606,6 +590,7 @@ Status CompressionFilter::decompress_var_string_coords(
     RETURN_NOT_OK(input_metadata.read(&string_len_bytesize, sizeof(uint8_t)));
     RETURN_NOT_OK(input_metadata.read(&dict_size, sizeof(uint32_t)));
     std::vector<std::byte> flattened_dict(dict_size);
+    // FIXME: this read contains a memcopy that is not necessary
     RETURN_NOT_OK(input_metadata.read(flattened_dict.data(), dict_size));
     std::vector<std::string> dict = DictEncoding::deserialize_dictionary(
         flattened_dict, string_len_bytesize);

@@ -88,6 +88,14 @@ class DictEncoding {
       span<uint64_t> output_offsets);
 
   /**
+   * Return the number of bytes required to store an integer
+   *
+   * @param param_length Number to calculate the bytesize
+   * @return Number of bytes required to store the input number
+   */
+  static uint8_t compute_bytesize(uint64_t param_length);
+
+  /**
    * Serialize string-id dictionary to store it in memory
    *
    * @param dict The dictionary to be used for decoding a word id into a string.

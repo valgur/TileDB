@@ -352,6 +352,9 @@ class FragmentMetadata {
   void set_tile_var_offset(
       const std::string& name, uint64_t tid, uint64_t step);
 
+  void set_dict_tile_offset(
+      const std::string& name, uint64_t tid, uint64_t step);
+
   /**
    * Sets a variable tile size for the input attribute or dimension.
    *
@@ -361,6 +364,8 @@ class FragmentMetadata {
    * @return void
    */
   void set_tile_var_size(const std::string& name, uint64_t tid, uint64_t size);
+
+  void set_dict_tile_size(const std::string& name, uint64_t tid, uint64_t size);
 
   /**
    * Sets a validity tile offset for the input attribute.
@@ -496,6 +501,8 @@ class FragmentMetadata {
   /** Returns the URI of the input variable-sized attribute/dimension. */
   tuple<Status, optional<URI>> var_uri(const std::string& name) const;
 
+  URI dict_uri(const std::string& name) const;
+
   /** Returns the validity URI of the input nullable attribute. */
   tuple<Status, optional<URI>> validity_uri(const std::string& name) const;
 
@@ -513,6 +520,9 @@ class FragmentMetadata {
    * @return Status
    */
   Status file_offset(
+      const std::string& name, uint64_t tile_idx, uint64_t* offset);
+
+  Status dict_offset(
       const std::string& name, uint64_t tile_idx, uint64_t* offset);
 
   /**
@@ -576,6 +586,18 @@ class FragmentMetadata {
    * @return Status, size
    */
   tuple<Status, optional<uint64_t>> persisted_tile_var_size(
+      const std::string& name, uint64_t tile_idx);
+
+  /**
+   * Retrieves the size of the tile when it is persisted (e.g. the size of the
+   * compressed tile on disk) for a given var-sized attribute or dimension
+   * and tile index.
+   *
+   * @param name The input attribute/dimension.
+   * @param tile_idx The index of the tile in the metadata.
+   * @return Status, size
+   */
+  tuple<Status, optional<uint64_t>> persisted_dict_tile_size(
       const std::string& name, uint64_t tile_idx);
 
   /**
@@ -804,6 +826,8 @@ class FragmentMetadata {
     std::vector<uint64_t> tile_sum_offsets_;
     std::vector<uint64_t> tile_null_count_offsets_;
     uint64_t tile_min_max_sum_null_count_offset_;
+    std::vector<uint64_t> dict_tile_offsets_;
+    std::vector<uint64_t> dict_tile_sizes_;
   };
 
   /** Keeps track of which metadata is loaded. */
@@ -819,6 +843,8 @@ class FragmentMetadata {
     std::vector<bool> tile_sum_;
     std::vector<bool> tile_null_count_;
     bool fragment_min_max_sum_null_count_ = false;
+    std::vector<bool> dict_tile_offsets_;
+    std::vector<bool> dict_tile_sizes_;
   };
 
   /* ********************************* */
@@ -866,6 +892,9 @@ class FragmentMetadata {
   /** Stores the size of each variable attribute file. */
   std::vector<uint64_t> file_var_sizes_;
 
+  /** Stores the size of each variable attribute file. */
+  std::vector<uint64_t> dict_file_sizes_;
+
   /** Stores the size of each validity attribute file. */
   std::vector<uint64_t> file_validity_sizes_;
 
@@ -905,6 +934,9 @@ class FragmentMetadata {
   /** Mutex per tile var offset loading. */
   std::deque<std::mutex> tile_var_offsets_mtx_;
 
+  /** Mutex per dict tile offset loading. */
+  std::deque<std::mutex> dict_tile_offsets_mtx_;
+
   /** The non-empty domain of the fragment. */
   NDRange non_empty_domain_;
 
@@ -934,6 +966,10 @@ class FragmentMetadata {
    * Meaningful only when there is compression for variable tiles.
    */
   std::vector<std::vector<uint64_t>> tile_var_sizes_;
+
+  std::vector<std::vector<uint64_t>> dict_tile_offsets_;
+
+  std::vector<std::vector<uint64_t>> dict_tile_sizes_;
 
   /**
    * The validity tile offsets in their corresponding attribute files.
@@ -1089,6 +1125,20 @@ class FragmentMetadata {
    * from storage.
    * */
   Status load_tile_var_sizes(const EncryptionKey& encryption_key, unsigned idx);
+
+  /**
+   * Loads the variable tile offsets for the input attribute or dimension idx
+   * from storage.
+   */
+  Status load_dict_tile_offsets(
+      const EncryptionKey& encryption_key, unsigned idx);
+
+  /**
+   * Loads the variable tile sizes for the input attribute or dimension idx
+   * from storage.
+   * */
+  Status load_dict_tile_sizes(
+      const EncryptionKey& encryption_key, unsigned idx);
 
   /**
    * Loads the validity tile offsets for the input attribute idx from storage.
@@ -1281,6 +1331,18 @@ class FragmentMetadata {
   Status load_tile_var_sizes(unsigned idx, ConstBuffer* buff);
 
   /**
+   * Loads the variable tile offsets for the input attribute or dimension from
+   * the input buffer.
+   */
+  Status load_dict_tile_offsets(unsigned idx, ConstBuffer* buff);
+
+  /**
+   * Loads the variable tile sizes for the input attribute or dimension
+   * from the input buffer.
+   */
+  Status load_dict_tile_sizes(unsigned idx, ConstBuffer* buff);
+
+  /**
    * Loads the validity tile offsets for the input attribute from the
    * input buffer.
    */
@@ -1444,6 +1506,42 @@ class FragmentMetadata {
    * to storage.
    */
   Status write_tile_var_sizes(unsigned idx, Buffer* buff);
+
+  /**
+   * Writes the variable tile offsets of the input attribute or dimension
+   * to storage.
+   *
+   * @param idx The index of the attribute or dimension.
+   * @param encryption_key The encryption key.
+   * @param nbytes The total number of bytes written for the tile var offsets.
+   * @return Status
+   */
+  Status store_dict_tile_offsets(
+      unsigned idx, const EncryptionKey& encryption_key, uint64_t* nbytes);
+
+  /**
+   * Writes the variable tile offsets of the input attribute or dimension idx
+   * to the buffer.
+   */
+  Status write_dict_tile_offsets(unsigned idx, Buffer* buff);
+
+  /**
+   * Writes the variable tile sizes for the input attribute or dimension to
+   * the buffer.
+   *
+   * @param idx The index of the attribute or dimension.
+   * @param encryption_key The encryption key.
+   * @param nbytes The total number of bytes written for the tile var sizes.
+   * @return Status
+   */
+  Status store_dict_tile_sizes(
+      unsigned idx, const EncryptionKey& encryption_key, uint64_t* nbytes);
+
+  /**
+   * Writes the variable tile sizes for the input attribute or dimension
+   * to storage.
+   */
+  Status write_dict_tile_sizes(unsigned idx, Buffer* buff);
 
   /**
    * Writes the validity tile offsets of the input attribute to storage.

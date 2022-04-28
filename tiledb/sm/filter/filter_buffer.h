@@ -143,6 +143,9 @@ class FilterBuffer {
    */
   Status copy_to(void* dest) const;
 
+  // copy to destination from the first buffer after offset
+  Status copy_to(void* dest, uint64_t offset) const;
+
   /**
    * Returns a ConstBuffer wrapping data at the current offset of the given
    * length. Returns an error if this is not possible (e.g. the region would

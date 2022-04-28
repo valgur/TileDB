@@ -2002,7 +2002,8 @@ Status StorageManager::write_to_cache(
   std::string uri_str = uri.to_string();
   if (filename == constants::fragment_metadata_filename ||
       (uri_str.find(constants::array_schema_dir_name) != std::string::npos) ||
-      filename == constants::array_schema_filename) {
+      filename == constants::array_schema_filename ||
+      filename == constants::dictionary_filename) {
     return Status::Ok();
   }
 

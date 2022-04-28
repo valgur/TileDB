@@ -212,6 +212,10 @@ class Tile {
     return filtered_buffer_;
   }
 
+  inline FilteredBuffer& dictionary() {
+    return dict_;
+  }
+
   /** Gets the format version number of the data in this Tile. */
   inline uint32_t format_version() const {
     return format_version_;
@@ -294,6 +298,8 @@ class Tile {
    * public API, all other public API routines operate on 'buffer_'.
    */
   FilteredBuffer filtered_buffer_;
+
+  FilteredBuffer dict_;
 
   /**
    * Static variable to store constants::max_tile_chunk_size. This will be used

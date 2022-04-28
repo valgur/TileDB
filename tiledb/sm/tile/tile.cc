@@ -86,7 +86,8 @@ Tile::Tile()
     , zipped_coords_dim_num_(0)
     , format_version_(0)
     , type_(Datatype::INT32)
-    , filtered_buffer_(0) {
+    , filtered_buffer_(0)
+    , dict_(0) {
 }
 
 Tile::Tile(
@@ -101,7 +102,8 @@ Tile::Tile(
     , zipped_coords_dim_num_(zipped_coords_dim_num)
     , format_version_(0)
     , type_(type)
-    , filtered_buffer_(0) {
+    , filtered_buffer_(0)
+    , dict_(0) {
 }
 
 Tile::Tile(Tile&& tile)
@@ -247,6 +249,7 @@ Status Tile::zip_coordinates() {
 void Tile::swap(Tile& tile) {
   // Note swapping buffer pointers here.
   std::swap(filtered_buffer_, tile.filtered_buffer_);
+  std::swap(dict_, tile.dict_);
   std::swap(size_, tile.size_);
   std::swap(data_, tile.data_);
   std::swap(cell_size_, tile.cell_size_);

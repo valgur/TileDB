@@ -242,14 +242,6 @@ class CompressionFilter : public Filter {
    * size */
   static tuple<std::vector<std::string_view>, uint64_t> create_input_view(
       const FilterBuffer& input, Tile* const offsets_tile);
-
-  /**
-   * Return the number of bytes required to store an integer
-   *
-   * @param param_length Number to calculate the bytesize
-   * @return Number of bytes required to store the input number
-   */
-  static uint8_t compute_bytesize(uint64_t param_length);
 };
 
 }  // namespace sm

@@ -36,6 +36,7 @@
 #include "tiledb/sm/array/array.h"
 #include "tiledb/sm/array_schema/array_schema.h"
 #include "tiledb/sm/array_schema/dimension.h"
+#include "tiledb/sm/compressors/dict_compressor.h"
 #include "tiledb/sm/enums/compressor.h"
 #include "tiledb/sm/filesystem/vfs.h"
 #include "tiledb/sm/filter/compression_filter.h"
@@ -757,9 +758,10 @@ Status WriterBase::filter_tile(
     filters = array_schema_.filters(name);
   }
 
-  // If those offsets belong to a var-sized string dimension/attribute then
-  // don't filter the offsets as the information will be included in, and can be
-  // reconstructed from, the filtered data tile.
+  // If those offsets belong to a var-sized string dimension/attribute and
+  // filter is RLE or Dictionary then don't filter the offsets as the
+  // information will be included in, and can be reconstructed from, the
+  // filtered data tile.
   if (offsets && array_schema_.filters(name).skip_offsets_filtering(
                      array_schema_.type(name))) {
     tile->filtered_buffer().expand(sizeof(uint64_t));
@@ -1050,20 +1052,21 @@ Status WriterBase::write_all_tiles(
       auto& tiles = it.second;
       RETURN_CANCEL_OR_ERROR(write_tiles(attr, frag_meta, 0, &tiles));
 
-      // Fix var size attributes metadata.
       const auto var_size = array_schema_.var_size(attr);
+      const auto nullable = array_schema_.is_nullable(attr);
+      const uint64_t tile_num_mult = 1 + var_size + nullable;
+      // Fix var size attributes metadata.
       if (has_min_max_metadata(attr, var_size) &&
           array_schema_.var_size(attr)) {
         frag_meta->convert_tile_min_max_var_sizes_to_offsets(attr);
 
-        const auto nullable = array_schema_.is_nullable(attr);
-        const uint64_t tile_num_mult = 1 + var_size + nullable;
         for (uint64_t i = 0; i < tiles.size(); i += tile_num_mult) {
           auto tile_idx = i / tile_num_mult;
           frag_meta->set_tile_min_var(attr, tile_idx, tiles[i].min());
           frag_meta->set_tile_max_var(attr, tile_idx, tiles[i].max());
         }
       }
+
       return Status::Ok();
     }));
   }
@@ -1094,6 +1097,8 @@ Status WriterBase::write_tiles(
   auto&& [status, uri] = frag_meta->uri(name);
   RETURN_NOT_OK(status);
 
+  auto dict_uri = frag_meta->dict_uri(name);
+
   Status st;
   optional<URI> var_uri;
   if (!var_size)
@@ -1117,6 +1122,42 @@ Status WriterBase::write_tiles(
   auto tile_num = tiles->size();
 
   // Write tiles
+  std::unordered_set<std::string> fragment_dict;
+  for (size_t i = 0, tile_id = start_tile_id; i < tile_num; ++i, ++tile_id) {
+    WriterTile* tile = &(*tiles)[i];
+    if (tile->dictionary().size()) {
+      auto dict_data = tile->dictionary().data();
+      auto dict_data_size = tile->dictionary().size();
+      // aggregate dict
+      uint8_t string_len_bytesize = 0;
+      uint32_t dict_size = 0;
+      std::memcpy(&string_len_bytesize, dict_data, sizeof(uint8_t));
+      dict_data += sizeof(uint8_t);
+      std::memcpy(&dict_size, dict_data, sizeof(uint32_t));
+      dict_data += sizeof(uint32_t);
+      assert(dict_data_size == dict_size + 5);
+      std::vector<std::string> dict = DictEncoding::deserialize_dictionary(
+          {reinterpret_cast<std::byte*>(dict_data), dict_size},
+          string_len_bytesize);
+      for (const auto& entry : dict) {
+        fragment_dict.insert(entry);
+      }
+    }
+  }
+
+  if (!fragment_dict.empty()) {
+    std::vector<std::string_view> fdict(
+        fragment_dict.begin(), fragment_dict.end());
+    // TODO: computer rather than hardcode those parameters
+    auto serialized_fdict =
+        DictEncoding::serialize_dictionary(fdict, 1, 1000000);
+    uint32_t fdict_size = serialized_fdict.size();
+    RETURN_NOT_OK(
+        storage_manager_->write(dict_uri, &fdict_size, sizeof(uint32_t)));
+    RETURN_NOT_OK(storage_manager_->write(
+        dict_uri, serialized_fdict.data(), serialized_fdict.size()));
+  }
+
   for (size_t i = 0, tile_id = start_tile_id; i < tile_num; ++i, ++tile_id) {
     WriterTile* tile = &(*tiles)[i];
     RETURN_NOT_OK(storage_manager_->write(
@@ -1135,6 +1176,16 @@ Status WriterBase::write_tiles(
       frag_meta->set_tile_var_offset(
           name, tile_id, tile->filtered_buffer().size());
       frag_meta->set_tile_var_size(name, tile_id, tile->pre_filtered_size());
+
+      if (tile->dictionary().size()) {
+        RETURN_NOT_OK(storage_manager_->write(
+            dict_uri, tile->dictionary().data(), tile->dictionary().size()));
+        frag_meta->set_dict_tile_offset(
+            name, tile_id, tile->dictionary().size());
+        // FIXME: this is probably not needed
+        frag_meta->set_dict_tile_size(name, tile_id, tile->dictionary().size());
+      }
+
       if (has_min_max_md && null_count != frag_meta->cell_num(tile_id)) {
         frag_meta->set_tile_min_var_size(name, tile_id, min_size);
         frag_meta->set_tile_max_var_size(name, tile_id, max_size);

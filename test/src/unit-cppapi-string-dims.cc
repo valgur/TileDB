@@ -1494,7 +1494,7 @@ void read_and_check_sparse_array_string_dim(
 
 TEST_CASE(
     "C++ API: Test filtering of string dimensions on sparse arrays",
-    "[cppapi][string-dims][rle-strings][dict-strings][sparse]") {
+    "[cppapi][string-dims][rle-strings][dict-strings][sparse][poc]") {
   std::string array_name = "test_rle_string_dim";
 
   // Create data buffer to use
@@ -1522,7 +1522,8 @@ TEST_CASE(
   auto dim =
       Dimension::create(ctx, "dim1", TILEDB_STRING_ASCII, nullptr, nullptr);
 
-  auto f = GENERATE(TILEDB_FILTER_RLE, TILEDB_FILTER_DICTIONARY);
+  // auto f = GENERATE(TILEDB_FILTER_RLE, TILEDB_FILTER_DICTIONARY);
+  auto f = GENERATE(TILEDB_FILTER_DICTIONARY);
   // Create compressor as a filter
   Filter filter(ctx, f);
   // Create filter list
@@ -1536,6 +1537,7 @@ TEST_CASE(
   ArraySchema schema(ctx, TILEDB_SPARSE);
   schema.set_domain(domain);
   schema.set_allows_dups(true);
+  schema.set_capacity(10);
   tiledb::Array::create(array_name, schema);
 
   SECTION("Unordered write") {

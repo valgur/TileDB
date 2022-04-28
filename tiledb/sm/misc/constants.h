@@ -209,6 +209,9 @@ extern const std::string ignore_file_suffix;
 /** The fragment metadata file name. */
 extern const std::string fragment_metadata_filename;
 
+/** The dictionary file name. */
+extern const std::string dictionary_filename;
+
 /** Default datatype for a generic tile. */
 extern const Datatype generic_tile_datatype;
 

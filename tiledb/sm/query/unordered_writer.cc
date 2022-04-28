@@ -662,6 +662,8 @@ Status UnorderedWriter::unordered_write() {
       compute_tiles_metadata(tile_num, tiles), clean_up(uri));
 
   // Filter all tiles
+  // Here add an attribut in tile to store the dict for each tile and
+  // in compression filter write the dict there -> HOW?
   RETURN_CANCEL_OR_ERROR_ELSE(filter_tiles(&tiles), clean_up(uri));
 
   // Write tiles for all attributes and coordinates
@@ -675,6 +677,8 @@ Status UnorderedWriter::unordered_write() {
   // Write the fragment metadata
   RETURN_CANCEL_OR_ERROR_ELSE(
       frag_meta->store(array_->get_encryption_key()), clean_up(uri));
+
+  // TODO: Write the dictionary data
 
   // Add written fragment info
   RETURN_NOT_OK_ELSE(add_written_fragment_info(uri), clean_up(uri));

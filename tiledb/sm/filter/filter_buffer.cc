@@ -172,6 +172,13 @@ Status FilterBuffer::copy_to(void* dest) const {
   return Status::Ok();
 }
 
+Status FilterBuffer::copy_to(void* dest, uint64_t offset) const {
+  auto src = buffers_.cbegin()->buffer();
+  std::memcpy(dest, (char*)src->data() + offset, src->size() - offset);
+
+  return Status::Ok();
+}
+
 Status FilterBuffer::get_const_buffer(
     uint64_t nbytes, ConstBuffer* buffer) const {
   if (current_buffer_ == buffers_.end())
