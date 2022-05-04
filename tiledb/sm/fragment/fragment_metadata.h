@@ -501,7 +501,7 @@ class FragmentMetadata {
   /** Returns the URI of the input variable-sized attribute/dimension. */
   tuple<Status, optional<URI>> var_uri(const std::string& name) const;
 
-  URI dict_uri(const std::string& name) const;
+  tuple<Status, optional<URI>> dict_uri(const std::string& name) const;
 
   /** Returns the validity URI of the input nullable attribute. */
   tuple<Status, optional<URI>> validity_uri(const std::string& name) const;
@@ -731,6 +731,8 @@ class FragmentMetadata {
 
   /** Frees the memory associated with the rtree. */
   void free_rtree();
+
+  Status load_dictionaries(std::vector<std::string>&& names);
 
   /**
    * Loads the variable tile sizes for the input attribute or dimension idx
@@ -970,6 +972,12 @@ class FragmentMetadata {
   std::vector<std::vector<uint64_t>> dict_tile_offsets_;
 
   std::vector<std::vector<uint64_t>> dict_tile_sizes_;
+
+  using TileDictionary = std::unordered_set<std::string>;
+
+  std::vector<std::vector<TileDictionary>> tile_dicts_;
+
+  std::vector<TileDictionary> fragment_dicts_;
 
   /**
    * The validity tile offsets in their corresponding attribute files.
@@ -1252,6 +1260,8 @@ class FragmentMetadata {
   /** Loads the sizes of each attribute validity file from the buffer. */
   Status load_file_validity_sizes(ConstBuffer* buff);
 
+  Status load_file_dict_sizes(ConstBuffer* buff);
+
   /**
    * Loads the cell number of the last tile from the fragment metadata buffer.
    *
@@ -1374,6 +1384,8 @@ class FragmentMetadata {
    */
   Status load_fragment_min_max_sum_null_count(ConstBuffer* buff);
 
+  Status load_fragment_dictionary(const std::string& name);
+
   /** Loads the format version from the buffer. */
   Status load_version(ConstBuffer* buff);
 
@@ -1416,6 +1428,8 @@ class FragmentMetadata {
 
   /** Writes the sizes of each variable attribute file to the buffer. */
   Status write_file_var_sizes(Buffer* buff) const;
+
+  Status write_dict_file_sizes(Buffer* buff) const;
 
   /** Writes the sizes of each validitiy attribute file to the buffer. */
   Status write_file_validity_sizes(Buffer* buff) const;

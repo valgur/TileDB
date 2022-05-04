@@ -215,6 +215,8 @@ class ReaderBase : public StrategyBase {
   Status load_tile_offsets(
       Subarray& subarray, const std::vector<std::string>& names);
 
+  Status load_dictionaries(const std::vector<std::string>& names);
+
   /**
    * Loads tile var sizes for each attribute/dimension name into
    * their associated element in `fragment_metadata_`.

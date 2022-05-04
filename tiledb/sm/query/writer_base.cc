@@ -1094,10 +1094,11 @@ Status WriterBase::write_tiles(
   // For easy reference
   const bool var_size = array_schema_.var_size(name);
   const bool nullable = array_schema_.is_nullable(name);
-  auto&& [status, uri] = frag_meta->uri(name);
-  RETURN_NOT_OK(status);
+  auto&& [status_dict, uri] = frag_meta->uri(name);
+  RETURN_NOT_OK(status_dict);
 
-  auto dict_uri = frag_meta->dict_uri(name);
+  auto&& [status, dict_uri] = frag_meta->dict_uri(name);
+  RETURN_NOT_OK(status);
 
   Status st;
   optional<URI> var_uri;
@@ -1121,7 +1122,9 @@ Status WriterBase::write_tiles(
   const auto has_sum_md = has_sum_metadata(name, var_size);
   auto tile_num = tiles->size();
 
-  // Write tiles
+  // create fragment level dict from each tile dict
+  // TODO: This works fine but I need to see where to write the fragment dict
+
   std::unordered_set<std::string> fragment_dict;
   for (size_t i = 0, tile_id = start_tile_id; i < tile_num; ++i, ++tile_id) {
     WriterTile* tile = &(*tiles)[i];
@@ -1148,14 +1151,14 @@ Status WriterBase::write_tiles(
   if (!fragment_dict.empty()) {
     std::vector<std::string_view> fdict(
         fragment_dict.begin(), fragment_dict.end());
-    // TODO: computer rather than hardcode those parameters
+    // TODO: compute instead of hardcoding those parameters
     auto serialized_fdict =
-        DictEncoding::serialize_dictionary(fdict, 1, 1000000);
+        DictEncoding::serialize_dictionary(fdict, 2, 1000000);
     uint32_t fdict_size = serialized_fdict.size();
     RETURN_NOT_OK(
-        storage_manager_->write(dict_uri, &fdict_size, sizeof(uint32_t)));
+        storage_manager_->write(*dict_uri, &fdict_size, sizeof(uint32_t)));
     RETURN_NOT_OK(storage_manager_->write(
-        dict_uri, serialized_fdict.data(), serialized_fdict.size()));
+        *dict_uri, serialized_fdict.data(), serialized_fdict.size()));
   }
 
   for (size_t i = 0, tile_id = start_tile_id; i < tile_num; ++i, ++tile_id) {
@@ -1178,12 +1181,12 @@ Status WriterBase::write_tiles(
       frag_meta->set_tile_var_size(name, tile_id, tile->pre_filtered_size());
 
       if (tile->dictionary().size()) {
+        uint32_t dict_size = tile->dictionary().size();
         RETURN_NOT_OK(storage_manager_->write(
-            dict_uri, tile->dictionary().data(), tile->dictionary().size()));
-        frag_meta->set_dict_tile_offset(
-            name, tile_id, tile->dictionary().size());
-        // FIXME: this is probably not needed
-        frag_meta->set_dict_tile_size(name, tile_id, tile->dictionary().size());
+            *dict_uri, tile->dictionary().data(), dict_size));
+        // TODO: see if I will use those
+        frag_meta->set_dict_tile_offset(name, tile_id, dict_size);
+        frag_meta->set_dict_tile_size(name, tile_id, dict_size);
       }
 
       if (has_min_max_md && null_count != frag_meta->cell_num(tile_id)) {

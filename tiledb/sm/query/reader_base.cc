@@ -229,6 +229,54 @@ bool ReaderBase::timestamps_not_present(
   return name == constants::timestamps && !frag_md->has_timestamps();
 }
 
+Status ReaderBase::load_dictionaries(const std::vector<std::string>& names) {
+  auto timer_se = stats_->start_timer("load_dictionaries");
+  const auto encryption_key = array_->encryption_key();
+
+  // Fetch relevant fragments so we load tile offsets only from intersecting
+  // fragments
+  // const auto relevant_fragments = subarray.relevant_fragments();
+
+  bool all_frag = true;
+
+  const auto status = parallel_for(
+      storage_manager_->compute_tp(),
+      0,
+      fragment_metadata_.size(),
+      [&](const uint64_t i) {
+        auto frag_idx = i;
+        auto& fragment = fragment_metadata_[frag_idx];
+        const auto format_version = fragment->format_version();
+
+        // Filter the 'names' for format-specific names.
+        std::vector<std::string> filtered_names;
+        filtered_names.reserve(names.size());
+        const auto& schema = fragment->array_schema();
+        for (const auto& name : names) {
+          // Applicable for zipped coordinates only to versions < 5
+          if (name == constants::coords && format_version >= 5)
+            continue;
+
+          // Applicable to separate coordinates only to versions >= 5
+          const auto is_dim = schema->is_dim(name);
+          if (is_dim && format_version < 5)
+            continue;
+
+          // Not a member of array schema, this field was added in array schema
+          // evolution, ignore for this fragment's tile offsets
+          if (!schema->is_field(name))
+            continue;
+
+          filtered_names.emplace_back(name);
+        }
+
+        RETURN_NOT_OK(fragment->load_dictionaries(std::move(filtered_names)));
+        return Status::Ok();
+      });
+
+  return status;
+}
+
 Status ReaderBase::load_tile_offsets(
     Subarray& subarray, const std::vector<std::string>& names) {
   auto timer_se = stats_->start_timer("load_tile_offsets");

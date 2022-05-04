@@ -35,6 +35,7 @@
 #include "tiledb/common/memory_tracker.h"
 #include "tiledb/sm/array/array.h"
 #include "tiledb/sm/array_schema/array_schema.h"
+#include "tiledb/sm/enums/filter_type.h"
 #include "tiledb/sm/filesystem/vfs.h"
 #include "tiledb/sm/fragment/fragment_metadata.h"
 #include "tiledb/sm/misc/parallel_functions.h"
@@ -228,6 +229,16 @@ Status SparseIndexReaderBase::load_initial_data() {
     // Make sure there is no memory taken by the subarray.
     subarray_.clear_tile_overlap();
 
+    std::vector<std::string> dictionaries_to_load;
+    for (auto& it : buffers_) {
+      const auto& name = it.first;
+      if (array_schema_.is_dim(name) &&
+          array_schema_.filters(name).has_filter(FilterType::FILTER_DICTIONARY))
+        dictionaries_to_load.emplace_back(name);
+    }
+
+    RETURN_NOT_OK(load_dictionaries(dictionaries_to_load));
+
     // Tile ranges computation will not stop if it exceeds memory budget.
     // This is ok as it is a soft limit and will be taken into consideration
     // later.
@@ -269,6 +280,8 @@ Status SparseIndexReaderBase::load_initial_data() {
       var_size_to_load.emplace_back(dim_names_[d]);
   }
   RETURN_CANCEL_OR_ERROR(load_tile_offsets(subarray_, dim_names_));
+
+  // TODO : load_dict_offsets and sizes here
 
   // Compute tile offsets to load and var size to load for attributes.
   std::vector<std::string> attr_tile_offsets_to_load;

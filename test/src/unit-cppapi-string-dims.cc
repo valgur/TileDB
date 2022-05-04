@@ -1543,6 +1543,10 @@ TEST_CASE(
   SECTION("Unordered write") {
     write_sparse_array_string_dim(
         ctx, array_name, data, data_elem_offsets, TILEDB_UNORDERED);
+    SECTION("Unordered read") {
+      read_and_check_sparse_array_string_dim(
+          ctx, array_name, data, data_elem_offsets, TILEDB_UNORDERED);
+    }
     SECTION("Row major read") {
       read_and_check_sparse_array_string_dim(
           ctx, array_name, data, data_elem_offsets, TILEDB_ROW_MAJOR);
@@ -1550,10 +1554,6 @@ TEST_CASE(
     SECTION("Global order read") {
       read_and_check_sparse_array_string_dim(
           ctx, array_name, data, data_elem_offsets, TILEDB_GLOBAL_ORDER);
-    }
-    SECTION("Unordered read") {
-      read_and_check_sparse_array_string_dim(
-          ctx, array_name, data, data_elem_offsets, TILEDB_UNORDERED);
     }
   }
   SECTION("Global order write") {
