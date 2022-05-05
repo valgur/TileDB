@@ -222,15 +222,15 @@ Status ReaderBase::check_validity_buffer_sizes() const {
 
   return Status::Ok();
 }
-
 bool ReaderBase::timestamps_not_present(
     const std::string& name,
     const std::shared_ptr<tiledb::sm::FragmentMetadata>& frag_md) const {
   return name == constants::timestamps && !frag_md->has_timestamps();
 }
 
-Status ReaderBase::load_dictionaries(const std::vector<std::string>& names) {
-  auto timer_se = stats_->start_timer("load_dictionaries");
+Status ReaderBase::load_fragment_dictionaries(
+    const std::vector<std::string>& names) {
+  auto timer_se = stats_->start_timer("load_fragment_dictionaries");
   const auto encryption_key = array_->encryption_key();
 
   // Fetch relevant fragments so we load tile offsets only from intersecting
@@ -253,13 +253,14 @@ Status ReaderBase::load_dictionaries(const std::vector<std::string>& names) {
         filtered_names.reserve(names.size());
         const auto& schema = fragment->array_schema();
         for (const auto& name : names) {
-          // Applicable for zipped coordinates only to versions < 5
-          if (name == constants::coords && format_version >= 5)
+          // Not applicable to zipped coordinates
+          if (name == constants::coords)
             continue;
 
-          // Applicable to separate coordinates only to versions >= 5
+          // Applicable to dimensions only
           const auto is_dim = schema->is_dim(name);
-          if (is_dim && format_version < 5)
+          // TODO: fix version
+          if (!is_dim || format_version < 13)
             continue;
 
           // Not a member of array schema, this field was added in array schema
@@ -270,7 +271,8 @@ Status ReaderBase::load_dictionaries(const std::vector<std::string>& names) {
           filtered_names.emplace_back(name);
         }
 
-        RETURN_NOT_OK(fragment->load_dictionaries(std::move(filtered_names)));
+        RETURN_NOT_OK(
+            fragment->load_fragment_dictionaries(std::move(filtered_names)));
         return Status::Ok();
       });
 

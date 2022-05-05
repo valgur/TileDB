@@ -61,6 +61,8 @@ class EncryptionKey;
 class MemoryTracker;
 class StorageManager;
 
+using TileDictionary = std::unordered_set<std::string>;
+
 /** Stores the metadata structures of a fragment. */
 class FragmentMetadata {
  public:
@@ -732,7 +734,9 @@ class FragmentMetadata {
   /** Frees the memory associated with the rtree. */
   void free_rtree();
 
-  Status load_dictionaries(std::vector<std::string>&& names);
+  Status load_fragment_dictionaries(std::vector<std::string>&& names);
+
+  Status load_tile_dictionaries(std::vector<std::string>&& names);
 
   /**
    * Loads the variable tile sizes for the input attribute or dimension idx
@@ -806,6 +810,8 @@ class FragmentMetadata {
    * @return
    */
   const shared_ptr<const ArraySchema>& array_schema() const;
+
+  TileDictionary fragment_dictionary(const std::string& dim_name) const;
 
  private:
   /* ********************************* */
@@ -972,8 +978,6 @@ class FragmentMetadata {
   std::vector<std::vector<uint64_t>> dict_tile_offsets_;
 
   std::vector<std::vector<uint64_t>> dict_tile_sizes_;
-
-  using TileDictionary = std::unordered_set<std::string>;
 
   std::vector<std::vector<TileDictionary>> tile_dicts_;
 

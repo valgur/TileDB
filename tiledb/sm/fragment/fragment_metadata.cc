@@ -1380,7 +1380,8 @@ Status FragmentMetadata::load_tile_offsets(
 
 // TODO: add load_dict_offsets_and_sizes for selectively loading dictionaries
 // TODO:  encryption ?
-Status FragmentMetadata::load_dictionaries(std::vector<std::string>&& names) {
+Status FragmentMetadata::load_fragment_dictionaries(
+    std::vector<std::string>&& names) {
   // todo: bump version
   if (version_ <= 12) {
     return Status::Ok();
@@ -1406,6 +1407,30 @@ Status FragmentMetadata::load_dictionaries(std::vector<std::string>&& names) {
         std::make_move_iterator(fragment_dict.begin()),
         std::make_move_iterator(fragment_dict.end())};
 
+    storage_manager_->stats()->add_counter(
+        "read_fragment_dict_size", buff.size());
+  }
+
+  return Status::Ok();
+}
+
+Status FragmentMetadata::load_tile_dictionaries(
+    std::vector<std::string>&& names) {
+  // todo: bump version
+  if (version_ <= 12) {
+    return Status::Ok();
+  }
+
+  // Do I need a lock ?
+  // std::lock_guard<std::mutex> lock(tile_offsets_mtx_[idx]);
+  for (const auto& name : names) {
+    auto&& [status, uri] = dict_uri(name);
+    uint32_t fragment_dict_size = 0;
+    uint64_t offset = 0;
+    RETURN_NOT_OK(storage_manager_->read(
+        *uri, offset, &fragment_dict_size, sizeof(uint32_t)));
+    offset += fragment_dict_size + sizeof(uint32_t);
+
     tile_dicts_[idx_map_[name]].resize(tile_num());
     for (size_t tid = 0; tid < tile_num(); tid++) {
       uint8_t string_len_bytesize = 0;
@@ -1427,10 +1452,11 @@ Status FragmentMetadata::load_dictionaries(std::vector<std::string>&& names) {
       tile_dicts_[idx_map_[name]][tid] = {
           std::make_move_iterator(tile_dict.begin()),
           std::make_move_iterator(tile_dict.end())};
+
+      storage_manager_->stats()->add_counter(
+          "read_tile_dict_size", buff.size());
     }
   }
-
-  // storage_manager_->stats()->add_counter("read_dict_size", buff.size());
 
   return Status::Ok();
 }
@@ -5178,6 +5204,17 @@ void FragmentMetadata::clean_up() {
 
 const shared_ptr<const ArraySchema>& FragmentMetadata::array_schema() const {
   return array_schema_;
+}
+
+TileDictionary FragmentMetadata::fragment_dictionary(
+    const std::string& dim_name) const {
+  // todo: check dim_name exists
+  auto it = idx_map_.find(dim_name);
+  assert(it != idx_map_.end());
+  auto idx = it->second;
+
+  // auto dim_id = idx_map_[dim_name];
+  return fragment_dicts_[idx];
 }
 
 void FragmentMetadata::build_idx_map() {

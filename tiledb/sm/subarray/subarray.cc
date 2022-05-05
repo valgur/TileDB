@@ -2405,6 +2405,7 @@ Status Subarray::precompute_all_ranges_tile_overlap(
   ComputeRelevantTileOverlapCtx tile_overlap_ctx;
   RETURN_NOT_OK(
       compute_relevant_fragments(compute_tp, nullptr, &relevant_fragment_ctx));
+  // TODO: check if this will be needed after using Tile dictionaries to filter
   RETURN_NOT_OK(load_relevant_fragment_rtrees(compute_tp));
 
   // Each thread will use one bitmap per dimensions.
@@ -2835,13 +2836,30 @@ Status Subarray::compute_relevant_fragments_for_dim(
     // if it overlaps with any range between the start and end coordinates
     // on this dimension.
     const Range& frag_range = meta[f]->non_empty_domain()[dim_idx];
+    const auto frag_dict = meta[f]->fragment_dictionary(dim->name());
+    // what is this for about?
     for (uint64_t r = start_coords[dim_idx]; r <= end_coords[dim_idx]; ++r) {
       const Range& query_range = range_subset_[dim_idx][r];
+      auto qr_start = query_range.start_str();
+      auto qr_end = query_range.end_str();
 
+      for (const auto& entry : frag_dict) {
+        if (entry >= qr_start && entry <= qr_end) {
+          (*frag_bytemap)[f] = 1;
+          break;
+        }
+      }
+
+      if ((*frag_bytemap)[f] == 1) {
+        break;
+      }
+
+      /*
       if (dim->overlap(frag_range, query_range)) {
         (*frag_bytemap)[f] = 1;
         break;
       }
+      */
     }
 
     return Status::Ok();
