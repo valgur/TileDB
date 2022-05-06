@@ -1654,37 +1654,6 @@ TEST_CASE(
   }
 }
 
-enum class TileOverlap { Full, Half, Slim, None };
-
-std::string create_string_data(
-    std::string base,
-    size_t total_num_strings,
-    size_t tile_size,
-    TileOverlap overlap,
-    size_t different_strings) {
-  // CHECK(different_strings < 100);
-  // CHECK(different_strings <= total_num_strings);
-  std::vector<std::string> repstr(different_strings);
-  auto last = base.size() - 1;
-  for (size_t i = 0; i < different_strings; i++) {
-    if (i < 10) {
-      repstr[i] = base.replace(last, 1, std::to_string(i));
-    } else {
-      repstr[i] = base.replace(last - 1, 2, std::to_string(i));
-    }
-  }
-  std::stringstream repetitions;
-  for (size_t i = 0; i < total_num_strings; i += different_strings) {
-    std::copy(
-        repstr.begin(),
-        repstr.end(),
-        std::ostream_iterator<std::string>(repetitions));
-  }
-
-  auto output = std::string(repetitions.str());
-  return output.substr(0, total_num_strings * base.size());
-}
-
 TEST_CASE(
     "C++ API: Test refining relevant fragments based on dict: full overlap",
     "[cppapi][string-dims][dict-strings][sparse][poc][poc-full]") {
@@ -1692,27 +1661,23 @@ TEST_CASE(
   tiledb::Stats::enable();
 
   // Create data buffer to use
-  std::string repetitions1;
-  std::stringstream repetitions2;
-  size_t repetition_num = 1000000;
-  size_t tile_size = 10000;
-  size_t string_len = 3;
+  std::stringstream repetitions1, repetitions2, repetitions3;
+  size_t repetition_num = 10000000;
   std::string init = "bar";
   std::string rep1 = "foo";
-  std::string rep2 = "goo";
+  std::string rep2 = "for";
   std::string end = "wow";
-  // create data with 30 different values
-  repetitions1 = create_string_data(
-      rep1, repetition_num - 2, tile_size, TileOverlap::Half, 30);
-  repetitions1 = create_string_data(
-      rep2, repetition_num - 2, tile_size, TileOverlap::Half, 30);
-  std::string data_f1 = init + repetitions1 + end;
-  std::string overlapping_data = init + repetitions2 + end;
+  for (size_t i = 0; i < repetition_num; i++)
+    repetitions1 << rep1;
+  for (size_t i = 0; i < repetition_num; i++)
+    repetitions2 << rep2;
+  std::string data_f1 = init + std::string(repetitions1.str()) + end;
+  std::string overlapping_data = init + std::string(repetitions2.str()) + end;
   // Create the corresponding offsets buffer
-  std::vector<uint64_t> data_elem_offsets(repetition_num);
-  int start = -string_len;
+  std::vector<uint64_t> data_elem_offsets(repetition_num + 2);
+  int start = -3;
   std::generate(data_elem_offsets.begin(), data_elem_offsets.end(), [&] {
-    return start += string_len;
+    return start += 3;
   });
 
   Context ctx;
@@ -1739,9 +1704,10 @@ TEST_CASE(
   ArraySchema schema(ctx, TILEDB_SPARSE);
   schema.set_domain(domain);
   schema.set_allows_dups(true);
-  schema.set_capacity(tile_size);
+  schema.set_capacity(10000);
 
-  // SECTION : Unordered WRITE
+  // SECTION : Unordered WRITE - Comment out if you have the array already
+  // written
   size_t fragment_num = 100;
   tiledb::Array::create(array_name, schema);
 
@@ -1768,7 +1734,7 @@ TEST_CASE(
 
   CHECK_NOTHROW(query.submit());
   // Check the element data and offsets are properly returned
-  auto expected_data = std::string(repetitions1);
+  auto expected_data = std::string(repetitions1.str());
   CHECK(data_back == expected_data);
 
   tiledb::Stats::dump(stdout);
@@ -1834,7 +1800,8 @@ TEST_CASE(
   schema.set_allows_dups(true);
   schema.set_capacity(10000);
 
-  // SECTION : Unordered WRITE
+  // SECTION : Unordered WRITE - Comment out if you have the array already
+  // written
   size_t fragment_num = 100;
   tiledb::Array::create(array_name, schema);
 
@@ -1932,7 +1899,8 @@ TEST_CASE(
   schema.set_allows_dups(true);
   schema.set_capacity(10000);
 
-  // SECTION : Unordered WRITE
+  // SECTION : Unordered WRITE - Comment out if you have the array already
+  // written
   size_t fragment_num = 100;
   size_t overlapping_fragment_num = 2;
   tiledb::Array::create(array_name, schema);

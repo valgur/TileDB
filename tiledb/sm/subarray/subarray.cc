@@ -2405,7 +2405,6 @@ Status Subarray::precompute_all_ranges_tile_overlap(
   ComputeRelevantTileOverlapCtx tile_overlap_ctx;
   RETURN_NOT_OK(
       compute_relevant_fragments(compute_tp, nullptr, &relevant_fragment_ctx));
-  // TODO: check if this will be needed after using Tile dictionaries to filter
   RETURN_NOT_OK(load_relevant_fragment_rtrees(compute_tp));
 
   // Each thread will use one bitmap per dimensions.
@@ -2442,6 +2441,10 @@ Status Subarray::precompute_all_ranges_tile_overlap(
             continue;
           }
 
+          // After that the dict for each tile is available in tile_dicts_[d]
+          auto dim = array_->array_schema_latest().dimension_ptr(d);
+          meta[f]->load_tile_dictionaries(dim->name());
+
           // Run all ranges in parallel.
           const uint64_t range_num = range_subset_[d].num_ranges();
 
@@ -2463,10 +2466,7 @@ Status Subarray::precompute_all_ranges_tile_overlap(
           RETURN_NOT_OK(status_ranges);
         }
 
-        // Go through the bitmaps in reverse, whenever there is a "hole" in tile
-        // contiguity, push a new result tile range.
-        uint64_t end = tile_bitmaps[0].size() - 1;
-        uint64_t length = 0;
+        // Combine all tile_bitmaps into the tile_bitmap of dimension 0
         int64_t min = static_cast<int64_t>(frag_tile_idx[f].tile_idx_);
         for (int64_t t = tile_bitmaps[0].size() - 1; t >= min; t--) {
           bool comb = true;
@@ -2474,7 +2474,44 @@ Status Subarray::precompute_all_ranges_tile_overlap(
             comb &= is_default_[d] || (bool)tile_bitmaps[d][t];
           }
 
-          if (!comb) {
+          tile_bitmaps[0][t] = comb;
+        }
+
+        for (size_t d = 0; d < dim_num; d++) {
+          auto dim = array_->array_schema_latest().dimension_ptr(d);
+          const auto& tile_dicts = meta[f]->tile_dictionaries(dim->name());
+          if (tile_dicts.empty()) {
+            continue;
+          }
+
+          for (int64_t t = tile_bitmaps[0].size() - 1; t >= min; t--) {
+            if (tile_bitmaps[0][t]) {
+              // filter out based on dict
+              for (const auto& range : range_subset_[d].ranges()) {
+                auto qr_start = range.start_str();
+                auto qr_end = range.end_str();
+                tile_bitmaps[0][t] = 0;
+                for (const auto& entry : tile_dicts[t]) {
+                  if (entry >= qr_start && entry <= qr_end) {
+                    tile_bitmaps[0][t] = 1;
+                    break;
+                  }
+                }
+
+                if (tile_bitmaps[0][t]) {
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        // Go through the bitmaps in reverse, whenever there is a "hole" in tile
+        // contiguity, push a new result tile range.
+        uint64_t end = tile_bitmaps[0].size() - 1;
+        uint64_t length = 0;
+        for (int64_t t = tile_bitmaps[0].size() - 1; t >= min; t--) {
+          if (!tile_bitmaps[0][t]) {
             if (length != 0) {
               result_tile_ranges->at(f).emplace_back(end + 1 - length, end);
               length = 0;
@@ -2837,7 +2874,6 @@ Status Subarray::compute_relevant_fragments_for_dim(
     // on this dimension.
     const Range& frag_range = meta[f]->non_empty_domain()[dim_idx];
     const auto frag_dict = meta[f]->fragment_dictionary(dim->name());
-    // what is this for about?
     for (uint64_t r = start_coords[dim_idx]; r <= end_coords[dim_idx]; ++r) {
       const Range& query_range = range_subset_[dim_idx][r];
 

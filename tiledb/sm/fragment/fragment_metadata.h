@@ -716,7 +716,7 @@ class FragmentMetadata {
 
   Status load_fragment_dictionaries(std::vector<std::string>&& names);
 
-  Status load_tile_dictionaries(std::vector<std::string>&& names);
+  Status load_tile_dictionaries(const std::string& dim_name);
 
   /**
    * Loads the variable tile sizes for the input attribute or dimension idx
@@ -792,6 +792,9 @@ class FragmentMetadata {
   const shared_ptr<const ArraySchema>& array_schema() const;
 
   TileDictionary fragment_dictionary(const std::string& dim_name) const;
+
+  std::vector<TileDictionary> tile_dictionaries(
+      const std::string& dim_name) const;
 
  private:
   /* ********************************* */

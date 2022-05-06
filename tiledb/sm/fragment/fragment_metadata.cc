@@ -1364,8 +1364,7 @@ Status FragmentMetadata::load_fragment_dictionaries(
   return Status::Ok();
 }
 
-Status FragmentMetadata::load_tile_dictionaries(
-    std::vector<std::string>&& names) {
+Status FragmentMetadata::load_tile_dictionaries(const std::string& dim_name) {
   // todo: bump version
   if (version_ <= 12) {
     return Status::Ok();
@@ -1373,41 +1372,37 @@ Status FragmentMetadata::load_tile_dictionaries(
 
   // Do I need a lock ?
   // std::lock_guard<std::mutex> lock(tile_offsets_mtx_[idx]);
-  for (const auto& name : names) {
-    auto&& [status, uri] = dict_uri(name);
-    uint32_t fragment_dict_size = 0;
-    uint64_t offset = 0;
+  auto&& [status, uri] = dict_uri(dim_name);
+  uint32_t fragment_dict_size = 0;
+  uint64_t offset = 0;
+  RETURN_NOT_OK(storage_manager_->read(
+      *uri, offset, &fragment_dict_size, sizeof(uint32_t)));
+  offset += fragment_dict_size + sizeof(uint32_t);
+
+  tile_dicts_[idx_map_[dim_name]].resize(tile_num());
+  for (size_t tid = 0; tid < tile_num(); tid++) {
+    uint8_t string_len_bytesize = 0;
     RETURN_NOT_OK(storage_manager_->read(
-        *uri, offset, &fragment_dict_size, sizeof(uint32_t)));
-    offset += fragment_dict_size + sizeof(uint32_t);
+        *uri, offset, &string_len_bytesize, sizeof(uint8_t)));
+    offset += sizeof(uint8_t);
+    uint32_t tile_dict_size = 0;
+    RETURN_NOT_OK(storage_manager_->read(
+        *uri, offset, &tile_dict_size, sizeof(uint32_t)));
+    offset += sizeof(uint32_t);
+    Buffer buff;
+    RETURN_NOT_OK(storage_manager_->read(*uri, offset, &buff, tile_dict_size));
+    tile_dicts_[idx_map_[dim_name]][tid] = DictEncoding::deserialize_dictionary(
+        {reinterpret_cast<std::byte*>(buff.data()), tile_dict_size},
+        string_len_bytesize);
+    offset += tile_dict_size;
 
-    tile_dicts_[idx_map_[name]].resize(tile_num());
-    for (size_t tid = 0; tid < tile_num(); tid++) {
-      uint8_t string_len_bytesize = 0;
-      RETURN_NOT_OK(storage_manager_->read(
-          *uri, offset, &string_len_bytesize, sizeof(uint8_t)));
-      offset += sizeof(uint8_t);
-      uint32_t tile_dict_size = 0;
-      RETURN_NOT_OK(storage_manager_->read(
-          *uri, offset, &tile_dict_size, sizeof(uint32_t)));
-      offset += sizeof(uint32_t);
-      Buffer buff;
-      RETURN_NOT_OK(
-          storage_manager_->read(*uri, offset, &buff, tile_dict_size));
-      tile_dicts_[idx_map_[name]][tid] = DictEncoding::deserialize_dictionary(
-          {reinterpret_cast<std::byte*>(buff.data()), tile_dict_size},
-          string_len_bytesize);
-      offset += tile_dict_size;
+    /* In case we want to have the dict stored as another container e.g. set
+    tile_dicts_[idx_map_[dim_name]][tid] = {
+        std::make_move_iterator(tile_dict.begin()),
+        std::make_move_iterator(tile_dict.end())};
+    */
 
-      /* In case we want to have the dict stored as another container e.g. set
-      tile_dicts_[idx_map_[name]][tid] = {
-          std::make_move_iterator(tile_dict.begin()),
-          std::make_move_iterator(tile_dict.end())};
-      */
-
-      storage_manager_->stats()->add_counter(
-          "read_tile_dict_size", buff.size());
-    }
+    storage_manager_->stats()->add_counter("read_tile_dict_size", buff.size());
   }
 
   return Status::Ok();
@@ -2138,14 +2133,11 @@ uint64_t FragmentMetadata::footer_size_v11_or_higher() const {
   size += sizeof(uint64_t);        // last tile cell num
   size += num * sizeof(uint64_t);  // file sizes
   size += num * sizeof(uint64_t);  // file var sizes
-  size += num * sizeof(uint64_t);  // file dict sizes
   size += num * sizeof(uint64_t);  // file validity sizes
   size += sizeof(uint64_t);        // R-Tree offset
   size += num * sizeof(uint64_t);  // tile offsets
   size += num * sizeof(uint64_t);  // tile var offsets
   size += num * sizeof(uint64_t);  // tile var sizes
-  size += num * sizeof(uint64_t);  // tile dict offsets
-  size += num * sizeof(uint64_t);  // tile dict sizes
   size += num * sizeof(uint64_t);  // tile validity sizes
   size += num * sizeof(uint64_t);  // tile validity sizes
   size += num * sizeof(uint64_t);  // tile validity sizes
@@ -4913,6 +4905,17 @@ TileDictionary FragmentMetadata::fragment_dictionary(
 
   // auto dim_id = idx_map_[dim_name];
   return fragment_dicts_[idx];
+}
+
+std::vector<TileDictionary> FragmentMetadata::tile_dictionaries(
+    const std::string& dim_name) const {
+  // todo: check dim_name exists
+  auto it = idx_map_.find(dim_name);
+  assert(it != idx_map_.end());
+  auto idx = it->second;
+
+  // auto dim_id = idx_map_[dim_name];
+  return tile_dicts_[idx];
 }
 
 void FragmentMetadata::build_idx_map() {

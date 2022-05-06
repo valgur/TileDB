@@ -1123,14 +1123,12 @@ Status WriterBase::write_tiles(
   auto tile_num = tiles->size();
 
   // create fragment level dict from each tile dict
-  // TODO: This works fine but I need to see where to write the fragment dict
-
   std::unordered_set<std::string> fragment_dict;
   for (size_t i = 0, tile_id = start_tile_id; i < tile_num; ++i, ++tile_id) {
     WriterTile* tile = &(*tiles)[i];
     if (tile->dictionary().size()) {
       auto dict_data = tile->dictionary().data();
-      auto dict_data_size = tile->dictionary().size();
+      // auto dict_data_size = tile->dictionary().size();
       // aggregate dict
       uint8_t string_len_bytesize = 0;
       uint32_t dict_size = 0;
@@ -1138,7 +1136,7 @@ Status WriterBase::write_tiles(
       dict_data += sizeof(uint8_t);
       std::memcpy(&dict_size, dict_data, sizeof(uint32_t));
       dict_data += sizeof(uint32_t);
-      assert(dict_data_size == dict_size + 5);
+      // assert(dict_data_size == dict_size + 5);
       std::vector<std::string> dict = DictEncoding::deserialize_dictionary(
           {reinterpret_cast<std::byte*>(dict_data), dict_size},
           string_len_bytesize);
