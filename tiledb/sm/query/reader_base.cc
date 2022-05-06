@@ -231,13 +231,7 @@ bool ReaderBase::timestamps_not_present(
 Status ReaderBase::load_fragment_dictionaries(
     const std::vector<std::string>& names) {
   auto timer_se = stats_->start_timer("load_fragment_dictionaries");
-  const auto encryption_key = array_->encryption_key();
-
-  // Fetch relevant fragments so we load tile offsets only from intersecting
-  // fragments
-  // const auto relevant_fragments = subarray.relevant_fragments();
-
-  bool all_frag = true;
+  // const auto encryption_key = array_->encryption_key();
 
   const auto status = parallel_for(
       storage_manager_->compute_tp(),

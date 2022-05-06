@@ -237,9 +237,7 @@ Status SparseIndexReaderBase::load_initial_data() {
         dictionaries_to_load.emplace_back(name);
     }
 
-    // To be improved: Load all fragment and tile dictionaries in advance
-    // Better to load fragment dicts first and then for relevant fragments
-    // load the corresponding tile dictionaries
+    // Load fragment dictionaries to refine relevant fragments
     RETURN_NOT_OK(load_fragment_dictionaries(dictionaries_to_load));
 
     // Tile ranges computation will not stop if it exceeds memory budget.

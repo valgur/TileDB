@@ -89,9 +89,6 @@ const std::string array_commits_dir_name = "__commits";
 /** The fragment metadata file name. */
 const std::string fragment_metadata_filename = "__fragment_metadata.tdb";
 
-/** The fragment metadata file name. */
-const std::string dictionary_filename = "__dictionary.tdb";
-
 /** The default tile capacity. */
 const uint64_t capacity = 10000;
 

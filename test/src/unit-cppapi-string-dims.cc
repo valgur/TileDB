@@ -1654,6 +1654,37 @@ TEST_CASE(
   }
 }
 
+enum class TileOverlap { Full, Half, Slim, None };
+
+std::string create_string_data(
+    std::string base,
+    size_t total_num_strings,
+    size_t tile_size,
+    TileOverlap overlap,
+    size_t different_strings) {
+  // CHECK(different_strings < 100);
+  // CHECK(different_strings <= total_num_strings);
+  std::vector<std::string> repstr(different_strings);
+  auto last = base.size() - 1;
+  for (size_t i = 0; i < different_strings; i++) {
+    if (i < 10) {
+      repstr[i] = base.replace(last, 1, std::to_string(i));
+    } else {
+      repstr[i] = base.replace(last - 1, 2, std::to_string(i));
+    }
+  }
+  std::stringstream repetitions;
+  for (size_t i = 0; i < total_num_strings; i += different_strings) {
+    std::copy(
+        repstr.begin(),
+        repstr.end(),
+        std::ostream_iterator<std::string>(repetitions));
+  }
+
+  auto output = std::string(repetitions.str());
+  return output.substr(0, total_num_strings * base.size());
+}
+
 TEST_CASE(
     "C++ API: Test refining relevant fragments based on dict: full overlap",
     "[cppapi][string-dims][dict-strings][sparse][poc][poc-full]") {
@@ -1661,25 +1692,27 @@ TEST_CASE(
   tiledb::Stats::enable();
 
   // Create data buffer to use
-  std::stringstream repetitions1;
+  std::string repetitions1;
   std::stringstream repetitions2;
-  size_t repetition_num = 10000000;
-  size_t fragment_num = 100;
+  size_t repetition_num = 1000000;
+  size_t tile_size = 10000;
+  size_t string_len = 3;
   std::string init = "bar";
   std::string rep1 = "foo";
-  std::string rep2 = "for";
+  std::string rep2 = "goo";
   std::string end = "wow";
-  for (size_t i = 0; i < repetition_num; i++)
-    repetitions1 << rep1;
-  for (size_t i = 0; i < repetition_num; i++)
-    repetitions2 << rep2;
-  std::string data_f1 = init + std::string(repetitions1.str()) + end;
-  std::string overlapping_data = init + std::string(repetitions2.str()) + end;
+  // create data with 30 different values
+  repetitions1 = create_string_data(
+      rep1, repetition_num - 2, tile_size, TileOverlap::Half, 30);
+  repetitions1 = create_string_data(
+      rep2, repetition_num - 2, tile_size, TileOverlap::Half, 30);
+  std::string data_f1 = init + repetitions1 + end;
+  std::string overlapping_data = init + repetitions2 + end;
   // Create the corresponding offsets buffer
-  std::vector<uint64_t> data_elem_offsets(repetition_num + 2);
-  int start = -3;
+  std::vector<uint64_t> data_elem_offsets(repetition_num);
+  int start = -string_len;
   std::generate(data_elem_offsets.begin(), data_elem_offsets.end(), [&] {
-    return start += 3;
+    return start += string_len;
   });
 
   Context ctx;
@@ -1706,38 +1739,38 @@ TEST_CASE(
   ArraySchema schema(ctx, TILEDB_SPARSE);
   schema.set_domain(domain);
   schema.set_allows_dups(true);
-  schema.set_capacity(10000);
-  /*  tiledb::Array::create(array_name, schema);
+  schema.set_capacity(tile_size);
 
-    SECTION("Unordered writes") {
-      write_sparse_array_string_dim(
-          ctx, array_name, overlapping_data, data_elem_offsets,
-    TILEDB_UNORDERED); write_sparse_array_string_dim( ctx, array_name, data_f1,
-    data_elem_offsets, TILEDB_UNORDERED); for (size_t i = 0; i < fragment_num -
-    2; i++) { write_sparse_array_string_dim( ctx, array_name, overlapping_data,
-            data_elem_offsets,
-            TILEDB_UNORDERED);
-      }
-      */
+  // SECTION : Unordered WRITE
+  size_t fragment_num = 100;
+  tiledb::Array::create(array_name, schema);
 
-  SECTION("Unordered read") {
-    Array array(ctx, array_name, TILEDB_READ);
-
-    std::vector<uint64_t> offsets_back(data_elem_offsets.size() - 2);
-    std::string data_back;
-    data_back.resize(repetition_num * 3);
-    Query query(ctx, array, TILEDB_READ);
-    query.add_range("dim1", std::string("foo"), std::string("foo"));
-    query.set_data_buffer("dim1", (char*)data_back.data(), data_back.size());
-    query.set_offsets_buffer("dim1", offsets_back.data(), offsets_back.size());
-    query.set_layout(TILEDB_UNORDERED);
-
-    CHECK_NOTHROW(query.submit());
-    // Check the element data and offsets are properly returned
-    auto expected_data = std::string(repetitions1.str());
-    CHECK(data_back == expected_data);
+  write_sparse_array_string_dim(
+      ctx, array_name, overlapping_data, data_elem_offsets, TILEDB_UNORDERED);
+  write_sparse_array_string_dim(
+      ctx, array_name, data_f1, data_elem_offsets, TILEDB_UNORDERED);
+  for (size_t i = 0; i < fragment_num - 2; i++) {
+    write_sparse_array_string_dim(
+        ctx, array_name, overlapping_data, data_elem_offsets, TILEDB_UNORDERED);
   }
-  // }
+
+  // SECTION : Unordered READ
+  Array array(ctx, array_name, TILEDB_READ);
+
+  std::vector<uint64_t> offsets_back(data_elem_offsets.size() - 2);
+  std::string data_back;
+  data_back.resize(repetition_num * 3);
+  Query query(ctx, array, TILEDB_READ);
+  query.add_range("dim1", std::string("foo"), std::string("foo"));
+  query.set_data_buffer("dim1", (char*)data_back.data(), data_back.size());
+  query.set_offsets_buffer("dim1", offsets_back.data(), offsets_back.size());
+  query.set_layout(TILEDB_UNORDERED);
+
+  CHECK_NOTHROW(query.submit());
+  // Check the element data and offsets are properly returned
+  auto expected_data = std::string(repetitions1);
+  CHECK(data_back == expected_data);
+
   tiledb::Stats::dump(stdout);
 
   // if (vfs.is_dir(array_name))
@@ -1754,7 +1787,6 @@ TEST_CASE(
   // Create data buffer to use
   std::stringstream repetitions1, repetitions2, repetitions3;
   size_t repetition_num = 10000000;
-  size_t fragment_num = 100;
   std::string init = "bar";
   std::string rep1 = "foo";
   std::string rep2 = "for";
@@ -1801,43 +1833,43 @@ TEST_CASE(
   schema.set_domain(domain);
   schema.set_allows_dups(true);
   schema.set_capacity(10000);
-  /*  tiledb::Array::create(array_name, schema);
 
-    SECTION("Unordered writes") {
-      write_sparse_array_string_dim(
-          ctx, array_name, overlapping_data, data_elem_offsets,
-    TILEDB_UNORDERED); write_sparse_array_string_dim( ctx, array_name, data_f1,
-    data_elem_offsets, TILEDB_UNORDERED); for (size_t i = 0; i < fragment_num /
-    2 - 1; i++) { write_sparse_array_string_dim( ctx, array_name,
-            overlapping_data,
-            data_elem_offsets,
-            TILEDB_UNORDERED);
-        write_sparse_array_string_dim(
-            ctx,
-            array_name,
-            non_overlapping_data,
-            data_elem_offsets,
-            TILEDB_UNORDERED);
-      }
-  */
-  SECTION("Unordered read") {
-    Array array(ctx, array_name, TILEDB_READ);
+  // SECTION : Unordered WRITE
+  size_t fragment_num = 100;
+  tiledb::Array::create(array_name, schema);
 
-    std::vector<uint64_t> offsets_back(data_elem_offsets.size() - 2);
-    std::string data_back;
-    data_back.resize(repetition_num * 3);
-    Query query(ctx, array, TILEDB_READ);
-    query.add_range("dim1", std::string("foo"), std::string("foo"));
-    query.set_data_buffer("dim1", (char*)data_back.data(), data_back.size());
-    query.set_offsets_buffer("dim1", offsets_back.data(), offsets_back.size());
-    query.set_layout(TILEDB_UNORDERED);
-
-    CHECK_NOTHROW(query.submit());
-    // Check the element data and offsets are properly returned
-    auto expected_data = std::string(repetitions1.str());
-    CHECK(data_back == expected_data);
+  write_sparse_array_string_dim(
+      ctx, array_name, overlapping_data, data_elem_offsets, TILEDB_UNORDERED);
+  write_sparse_array_string_dim(
+      ctx, array_name, data_f1, data_elem_offsets, TILEDB_UNORDERED);
+  for (size_t i = 0; i < fragment_num / 2 - 1; i++) {
+    write_sparse_array_string_dim(
+        ctx, array_name, overlapping_data, data_elem_offsets, TILEDB_UNORDERED);
+    write_sparse_array_string_dim(
+        ctx,
+        array_name,
+        non_overlapping_data,
+        data_elem_offsets,
+        TILEDB_UNORDERED);
   }
-  //  }
+
+  // SECTION : Unordered READ
+  Array array(ctx, array_name, TILEDB_READ);
+
+  std::vector<uint64_t> offsets_back(data_elem_offsets.size() - 2);
+  std::string data_back;
+  data_back.resize(repetition_num * 3);
+  Query query(ctx, array, TILEDB_READ);
+  query.add_range("dim1", std::string("foo"), std::string("foo"));
+  query.set_data_buffer("dim1", (char*)data_back.data(), data_back.size());
+  query.set_offsets_buffer("dim1", offsets_back.data(), offsets_back.size());
+  query.set_layout(TILEDB_UNORDERED);
+
+  CHECK_NOTHROW(query.submit());
+  // Check the element data and offsets are properly returned
+  auto expected_data = std::string(repetitions1.str());
+  CHECK(data_back == expected_data);
+
   tiledb::Stats::dump(stdout);
 
   // if (vfs.is_dir(array_name))
@@ -1853,8 +1885,6 @@ TEST_CASE(
   // Create data buffer to use
   std::stringstream repetitions1, repetitions2, repetitions3;
   size_t repetition_num = 10000000;
-  size_t fragment_num = 100;
-  size_t overlapping_fragment_num = 2;
   std::string init = "bar";
   std::string rep1 = "foo";
   std::string rep2 = "for";
@@ -1901,52 +1931,50 @@ TEST_CASE(
   schema.set_domain(domain);
   schema.set_allows_dups(true);
   schema.set_capacity(10000);
-  /*  tiledb::Array::create(array_name, schema);
 
-    SECTION("Unordered writes") {
-      write_sparse_array_string_dim(
-          ctx, array_name, data_f1, data_elem_offsets, TILEDB_UNORDERED);
-      for (size_t i = 0; i < overlapping_fragment_num; i++) {
-        write_sparse_array_string_dim(
-            ctx,
-            array_name,
-            overlapping_data,
-            data_elem_offsets,
-            TILEDB_UNORDERED);
-        write_sparse_array_string_dim(
-            ctx,
-            array_name,
-            non_overlapping_data,
-            data_elem_offsets,
-            TILEDB_UNORDERED);
-      }
-      for (size_t i = 0; i < fragment_num - overlapping_fragment_num - 1; i++) {
-        write_sparse_array_string_dim(
-            ctx,
-            array_name,
-            non_overlapping_data,
-            data_elem_offsets,
-            TILEDB_UNORDERED);
-      }
-  */
-  SECTION("Unordered read") {
-    Array array(ctx, array_name, TILEDB_READ);
+  // SECTION : Unordered WRITE
+  size_t fragment_num = 100;
+  size_t overlapping_fragment_num = 2;
+  tiledb::Array::create(array_name, schema);
 
-    std::vector<uint64_t> offsets_back(data_elem_offsets.size() - 2);
-    std::string data_back;
-    data_back.resize(repetition_num * 3);
-    Query query(ctx, array, TILEDB_READ);
-    query.add_range("dim1", std::string("foo"), std::string("foo"));
-    query.set_data_buffer("dim1", (char*)data_back.data(), data_back.size());
-    query.set_offsets_buffer("dim1", offsets_back.data(), offsets_back.size());
-    query.set_layout(TILEDB_UNORDERED);
-
-    CHECK_NOTHROW(query.submit());
-    // Check the element data and offsets are properly returned
-    auto expected_data = std::string(repetitions1.str());
-    CHECK(data_back == expected_data);
+  write_sparse_array_string_dim(
+      ctx, array_name, data_f1, data_elem_offsets, TILEDB_UNORDERED);
+  for (size_t i = 0; i < overlapping_fragment_num; i++) {
+    write_sparse_array_string_dim(
+        ctx, array_name, overlapping_data, data_elem_offsets, TILEDB_UNORDERED);
+    write_sparse_array_string_dim(
+        ctx,
+        array_name,
+        non_overlapping_data,
+        data_elem_offsets,
+        TILEDB_UNORDERED);
   }
-  //  }
+  for (size_t i = 0; i < fragment_num - overlapping_fragment_num - 1; i++) {
+    write_sparse_array_string_dim(
+        ctx,
+        array_name,
+        non_overlapping_data,
+        data_elem_offsets,
+        TILEDB_UNORDERED);
+  }
+
+  // SECTION : Unordered READ
+  Array array(ctx, array_name, TILEDB_READ);
+
+  std::vector<uint64_t> offsets_back(data_elem_offsets.size() - 2);
+  std::string data_back;
+  data_back.resize(repetition_num * 3);
+  Query query(ctx, array, TILEDB_READ);
+  query.add_range("dim1", std::string("foo"), std::string("foo"));
+  query.set_data_buffer("dim1", (char*)data_back.data(), data_back.size());
+  query.set_offsets_buffer("dim1", offsets_back.data(), offsets_back.size());
+  query.set_layout(TILEDB_UNORDERED);
+
+  CHECK_NOTHROW(query.submit());
+  // Check the element data and offsets are properly returned
+  auto expected_data = std::string(repetitions1.str());
+  CHECK(data_back == expected_data);
+
   tiledb::Stats::dump(stdout);
 
   // if (vfs.is_dir(array_name))

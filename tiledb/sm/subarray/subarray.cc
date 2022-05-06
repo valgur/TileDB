@@ -2840,26 +2840,27 @@ Status Subarray::compute_relevant_fragments_for_dim(
     // what is this for about?
     for (uint64_t r = start_coords[dim_idx]; r <= end_coords[dim_idx]; ++r) {
       const Range& query_range = range_subset_[dim_idx][r];
-      auto qr_start = query_range.start_str();
-      auto qr_end = query_range.end_str();
 
-      for (const auto& entry : frag_dict) {
-        if (entry >= qr_start && entry <= qr_end) {
+      if (!frag_dict.empty()) {
+        auto qr_start = query_range.start_str();
+        auto qr_end = query_range.end_str();
+
+        for (const auto& entry : frag_dict) {
+          if (entry >= qr_start && entry <= qr_end) {
+            (*frag_bytemap)[f] = 1;
+            break;
+          }
+        }
+
+        if ((*frag_bytemap)[f] == 1) {
+          break;
+        }
+      } else {
+        if (dim->overlap(frag_range, query_range)) {
           (*frag_bytemap)[f] = 1;
           break;
         }
       }
-
-      if ((*frag_bytemap)[f] == 1) {
-        break;
-      }
-
-      /*
-      if (dim->overlap(frag_range, query_range)) {
-        (*frag_bytemap)[f] = 1;
-        break;
-      }
-      */
     }
 
     return Status::Ok();

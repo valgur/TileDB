@@ -1184,9 +1184,6 @@ Status WriterBase::write_tiles(
         uint32_t dict_size = tile->dictionary().size();
         RETURN_NOT_OK(storage_manager_->write(
             *dict_uri, tile->dictionary().data(), dict_size));
-        // TODO: see if I will use those
-        frag_meta->set_dict_tile_offset(name, tile_id, dict_size);
-        frag_meta->set_dict_tile_size(name, tile_id, dict_size);
       }
 
       if (has_min_max_md && null_count != frag_meta->cell_num(tile_id)) {
