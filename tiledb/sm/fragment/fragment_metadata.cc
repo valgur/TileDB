@@ -1365,6 +1365,9 @@ Status FragmentMetadata::load_fragment_dictionaries(
 }
 
 Status FragmentMetadata::load_tile_dictionaries(const std::string& dim_name) {
+  auto timer_se =
+      storage_manager_->stats()->start_timer("load_tile_dictionaries");
+
   // todo: bump version
   if (version_ <= 12) {
     return Status::Ok();
