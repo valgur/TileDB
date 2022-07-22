@@ -31,6 +31,7 @@
  */
 
 #include "dimension.h"
+#include "tiledb/common/logger.h"
 #include "tiledb/common/logger_public.h"
 #include "tiledb/common/stdx_string.h"
 #include "tiledb/sm/buffer/buffer.h"
@@ -1006,6 +1007,7 @@ void Dimension::splitting_value<char>(
 
   // Check unsplittable
   if (!r.empty() && r.unary()) {
+    TRACE_CHECKPOINT_STR("Unsplittable");
     *unsplittable = true;
     return;
   }
@@ -1021,12 +1023,14 @@ void Dimension::splitting_value<char>(
   // limit on how deep we will split a user-given range. If we
   // reach this limit, we will treat the range as unsplittable.
   if (r.partition_depth() >= constants::max_string_dim_split_depth) {
+    TRACE_CHECKPOINT_STR("Unsplittable");
     *unsplittable = true;
     return;
   }
 
   // Check unsplittable
   if (!end.empty() && end[pref_size] == 0) {
+    TRACE_CHECKPOINT_STR("Unsplittable");
     *unsplittable = true;
     return;
   }

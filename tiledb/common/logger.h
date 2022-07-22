@@ -59,6 +59,144 @@
 #include "tiledb/common/heap_memory.h"
 #include "tiledb/common/status.h"
 
+#define __FILENAME__ \
+  (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+
+#define TRACE_ENTER()                                                         \
+  std::time_t start_time =                                                    \
+      std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()); \
+  std::string start_time_str = std::ctime(&start_time);                       \
+  fprintf(                                                                    \
+      stderr,                                                                 \
+      "[%s] %s:%d: enter %s\n",                                               \
+      start_time_str.substr(0, start_time_str.length() - 1).c_str(),          \
+      __FILENAME__,                                                           \
+      __LINE__,                                                               \
+      __func__)
+
+#define TRACE_CHECKPOINT(x)                                                    \
+  std::time_t checkpoint_time =                                                \
+      std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());  \
+  std::string checkpoint_time_str = std::ctime(&checkpoint_time);              \
+  fprintf(                                                                     \
+      stderr,                                                                  \
+      "[%s] %s:%d: checkpoint: %s\n",                                          \
+      checkpoint_time_str.substr(0, checkpoint_time_str.length() - 1).c_str(), \
+      __FILENAME__,                                                            \
+      __LINE__,                                                                \
+      std::to_string(x).c_str())
+
+#define TRACE_CHECKPOINT_STR(x)                                         \
+  do {                                                                  \
+    std::time_t checkpoint_time = std::chrono::system_clock::to_time_t( \
+        std::chrono::system_clock::now());                              \
+    std::string checkpoint_time_str = std::ctime(&checkpoint_time);     \
+    fprintf(                                                            \
+        stderr,                                                         \
+        "[%s] %s:%d: checkpoint: %s\n",                                 \
+        checkpoint_time_str.substr(0, checkpoint_time_str.length() - 1) \
+            .c_str(),                                                   \
+        __FILENAME__,                                                   \
+        __LINE__,                                                       \
+        x);                                                             \
+  } while (false)
+
+#define TRACE_RETURN(x)                                                       \
+  std::time_t end_time =                                                      \
+      std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()); \
+  std::string end_time_str = std::ctime(&end_time);                           \
+  fprintf(                                                                    \
+      stderr,                                                                 \
+      "[%s] %s:%d: exit %s\n",                                                \
+      end_time_str.substr(0, end_time_str.length() - 1).c_str(),              \
+      __FILENAME__,                                                           \
+      __LINE__,                                                               \
+      __func__);                                                              \
+  return x
+
+#define TRACE_RETURN_VOID()                                                   \
+  std::time_t end_time =                                                      \
+      std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()); \
+  std::string end_time_str = std::ctime(&end_time);                           \
+  fprintf(                                                                    \
+      stderr,                                                                 \
+      "[%s] %s:%d: exit %s\n",                                                \
+      end_time_str.substr(0, end_time_str.length() - 1).c_str(),              \
+      __FILENAME__,                                                           \
+      __LINE__,                                                               \
+      __func__);                                                              \
+  return
+
+#define TRACE_RETURN_NOT_OK(s)                                       \
+  do {                                                               \
+    Status _s = (s);                                                 \
+    if (!_s.ok()) {                                                  \
+      std::time_t end_time = std::chrono::system_clock::to_time_t(   \
+          std::chrono::system_clock::now());                         \
+      std::string end_time_str = std::ctime(&end_time);              \
+      fprintf(                                                       \
+          stderr,                                                    \
+          "[%s] %s:%d: exit %s\n",                                   \
+          end_time_str.substr(0, end_time_str.length() - 1).c_str(), \
+          __FILENAME__,                                              \
+          __LINE__,                                                  \
+          __func__);                                                 \
+      return _s;                                                     \
+    }                                                                \
+  } while (false)
+
+#define TRACE_RETURN_NOT_OK_ELSE(s, else_)                           \
+  do {                                                               \
+    Status _s = (s);                                                 \
+    if (!_s.ok()) {                                                  \
+      else_;                                                         \
+                                                                     \
+      std::time_t end_time = std::chrono::system_clock::to_time_t(   \
+          std::chrono::system_clock::now());                         \
+      std::string end_time_str = std::ctime(&end_time);              \
+      fprintf(                                                       \
+          stderr,                                                    \
+          "[%s] %s:%d: exit %s\n",                                   \
+          end_time_str.substr(0, end_time_str.length() - 1).c_str(), \
+          __FILENAME__,                                              \
+          __LINE__,                                                  \
+          __func__);                                                 \
+      return _s;                                                     \
+    }                                                                \
+  } while (false)
+
+#define TRACE_RETURN_CANCEL_OR_ERROR(s)                              \
+  do {                                                               \
+    Status _s = (s);                                                 \
+    if (!_s.ok()) {                                                  \
+      std::time_t end_time = std::chrono::system_clock::to_time_t(   \
+          std::chrono::system_clock::now());                         \
+      std::string end_time_str = std::ctime(&end_time);              \
+      fprintf(                                                       \
+          stderr,                                                    \
+          "[%s] %s:%d: exit %s\n",                                   \
+          end_time_str.substr(0, end_time_str.length() - 1).c_str(), \
+          __FILENAME__,                                              \
+          __LINE__,                                                  \
+          __func__);                                                 \
+      return _s;                                                     \
+      return _s;                                                     \
+    } else if (storage_manager_->cancellation_in_progress()) {       \
+      std::time_t end_time = std::chrono::system_clock::to_time_t(   \
+          std::chrono::system_clock::now());                         \
+      std::string end_time_str = std::ctime(&end_time);              \
+      fprintf(                                                       \
+          stderr,                                                    \
+          "[%s] %s:%d: exit %s\n",                                   \
+          end_time_str.substr(0, end_time_str.length() - 1).c_str(), \
+          __FILENAME__,                                              \
+          __LINE__,                                                  \
+          __func__);                                                 \
+      return _s;                                                     \
+      return Status::QueryError("Query cancelled.");                 \
+    }                                                                \
+  } while (false)
+
 namespace tiledb {
 namespace common {
 

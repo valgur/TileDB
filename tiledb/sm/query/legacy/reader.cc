@@ -179,6 +179,78 @@ Status Reader::complete_read_loop() {
   return Status::Ok();
 }
 
+std::string value_to_string(const void* v, const Dimension* dim) {
+  const int8_t* r8;
+  const uint8_t* ru8;
+  const int16_t* r16;
+  const uint16_t* ru16;
+  const int32_t* r32;
+  const uint32_t* ru32;
+  const int64_t* r64;
+  const uint64_t* ru64;
+  const float* rf32;
+  const double* rf64;
+  switch (dim->type()) {
+    case Datatype::INT8:
+      r8 = (const int8_t*)v;
+      return std::to_string(r8[0]);
+      break;
+    case Datatype::UINT8:
+      ru8 = (const uint8_t*)v;
+      return std::to_string(ru8[0]);
+      break;
+    case Datatype::INT16:
+      r16 = (const int16_t*)v;
+      return std::to_string(r16[0]);
+      break;
+    case Datatype::UINT16:
+      ru16 = (const uint16_t*)v;
+      return std::to_string(ru16[0]);
+      break;
+    case Datatype::INT32:
+      r32 = (const int32_t*)v;
+      return std::to_string(r32[0]);
+      break;
+    case Datatype::UINT32:
+      ru32 = (const uint32_t*)v;
+      return std::to_string(ru32[0]);
+      break;
+    case Datatype::INT64:
+      r64 = (const int64_t*)v;
+      return std::to_string(r64[0]);
+      break;
+    case Datatype::UINT64:
+      ru64 = (const uint64_t*)v;
+      return std::to_string(ru64[0]);
+      break;
+    case Datatype::FLOAT32:
+      rf32 = (const float*)v;
+      return std::to_string(rf32[0]);
+      break;
+    case Datatype::FLOAT64:
+      rf64 = (const double*)v;
+      return std::to_string(rf64[0]);
+      break;
+    default:
+      throw std::invalid_argument(
+          "Cannot get MBR; Unsupported coordinates type");
+  }
+
+  return std::string();
+}
+
+std::string str_to_string(std::string s) {
+  std::string ret;
+  for (char c : s) {
+    if (c < 32 || c > 0x7e) {
+      ret += std::string("\\") + std::to_string((uint8_t)c);
+    } else {
+      ret += c;
+    }
+  }
+  return ret;
+}
+
 uint64_t Reader::get_timestamp(const ResultCoords& rc) const {
   const auto f = rc.tile_->frag_idx();
   if (fragment_metadata_[f]->has_timestamps()) {
@@ -220,6 +292,31 @@ Status Reader::dowork() {
     read_state_.overflowed_ = false;
     reset_buffer_sizes();
 
+    const auto& subarray = read_state_.partitioner_.current();
+
+    TRACE_CHECKPOINT_STR("Processing subarray: ");
+    for (unsigned d = 0; d < subarray.dim_num(); d++) {
+      auto dim = array_schema_.dimension_ptr(d);
+      if (!subarray.is_default(d)) {
+        const Range* r;
+        auto range = subarray.get_range(d, 0, &r);
+        if (dim->type() == Datatype::STRING_ASCII) {
+          auto log = std::to_string(d) + std::string(": ") +
+                     std::string(r->start_str()) + std::string("-") +
+                     std::string(r->start_str());
+          TRACE_CHECKPOINT_STR(log.c_str());
+        } else {
+          auto log = std::to_string(d) + std::string(": ") +
+                     value_to_string(r->start_fixed(), dim) + std::string("-") +
+                     value_to_string(r->end_fixed(), dim);
+          TRACE_CHECKPOINT_STR(log.c_str());
+        }
+      } else {
+        auto log = std::to_string(d) + std::string(": default");
+        TRACE_CHECKPOINT_STR(log.c_str());
+      }
+    }
+
     // Perform read
     if (dense_mode) {
       RETURN_NOT_OK(dense_read());
@@ -231,9 +328,11 @@ Status Reader::dowork() {
     // without advancing to the next partition
     if (read_state_.overflowed_) {
       zero_out_buffer_sizes();
+      TRACE_CHECKPOINT_STR("Reader: overflowed, trying to split currrent");
       RETURN_NOT_OK(read_state_.split_current());
 
       if (read_state_.unsplittable_) {
+        TRACE_CHECKPOINT_STR("Reader: unsplittable, done");
         return complete_read_loop();
       }
     } else {
@@ -248,9 +347,11 @@ Status Reader::dowork() {
         read_state_.unsplittable_ = false;
 
       if (has_results || read_state_.done()) {
+        TRACE_CHECKPOINT_STR("Reader: done");
         return complete_read_loop();
       }
 
+      TRACE_CHECKPOINT_STR("Reader: next partition");
       RETURN_NOT_OK(read_state_.next());
     }
   } while (true);
@@ -2015,6 +2116,10 @@ void Reader::get_result_cell_stats(
   uint64_t result_num = 0;
   for (const auto& rc : result_cell_slabs)
     result_num += rc.length_;
+
+  auto log = std::string("Result num: ") + std::to_string(result_num);
+  TRACE_CHECKPOINT_STR(log.c_str());
+
   stats_->add_counter("result_num", result_num);
 }
 
