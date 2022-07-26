@@ -408,6 +408,7 @@ Status SubarrayPartitioner::next(bool* unsplittable) {
 
   // Handle case the next partition is composed of whole ND ranges
   if (interval_found && !must_split_slab) {
+    TRACE_CHECKPOINT_STR("Found interval...");
     current_.partition_ =
         subarray_.get_subarray(current_.start_, current_.end_);
     current_.split_multi_range_ = false;

@@ -263,9 +263,33 @@ uint64_t Reader::get_timestamp(const ResultCoords& rc) const {
 Status Reader::dowork() {
   auto timer_se = stats_->start_timer("dowork");
 
-  auto log = std::string("DoWork num ranges: ") +
-             std::to_string(subarray_.range_num());
+  auto range_num = subarray_.range_num();
+  auto log = std::string("DoWork num ranges: ") + std::to_string(range_num);
   TRACE_CHECKPOINT_STR(log.c_str());
+
+  for (uint64_t i = 0; i < range_num; i++) {
+    auto ndrange = subarray_.ndrange(i);
+    for (unsigned d = 0; d < subarray_.dim_num(); d++) {
+      auto dim = array_schema_.dimension_ptr(d);
+      if (!subarray_.is_default(d)) {
+        const Range* r = &ndrange[d];
+        if (dim->type() == Datatype::STRING_ASCII) {
+          auto log = std::to_string(d) + std::string(": ") +
+                     std::string(r->start_str()) + std::string("-") +
+                     std::string(r->start_str());
+          TRACE_CHECKPOINT_STR(log.c_str());
+        } else {
+          auto log = std::to_string(d) + std::string(": ") +
+                     value_to_string(r->start_fixed(), dim) + std::string("-") +
+                     value_to_string(r->end_fixed(), dim);
+          TRACE_CHECKPOINT_STR(log.c_str());
+        }
+      } else {
+        auto log = std::to_string(d) + std::string(": default");
+        TRACE_CHECKPOINT_STR(log.c_str());
+      }
+    }
+  }
 
   // Check that the query condition is valid.
   RETURN_NOT_OK(condition_.check(array_schema_));
