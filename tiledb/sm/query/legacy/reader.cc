@@ -263,6 +263,10 @@ uint64_t Reader::get_timestamp(const ResultCoords& rc) const {
 Status Reader::dowork() {
   auto timer_se = stats_->start_timer("dowork");
 
+  auto log = std::string("DoWork num ranges: ") +
+             std::to_string(subarray_.range_num());
+  TRACE_CHECKPOINT_STR(log.c_str());
+
   // Check that the query condition is valid.
   RETURN_NOT_OK(condition_.check(array_schema_));
 

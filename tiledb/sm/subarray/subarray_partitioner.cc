@@ -1221,6 +1221,8 @@ bool SubarrayPartitioner::must_split(Subarray* partition) {
 }
 
 Status SubarrayPartitioner::next_from_multi_range(bool* unsplittable) {
+  TRACE_ENTER();
+
   // A new multi-range subarray may need to be put in the list and split
   if (state_.multi_range_.empty()) {
     auto s = subarray_.get_subarray(current_.start_, current_.end_);
@@ -1250,6 +1252,8 @@ Status SubarrayPartitioner::next_from_multi_range(bool* unsplittable) {
 }
 
 Status SubarrayPartitioner::next_from_single_range(bool* unsplittable) {
+  TRACE_ENTER();
+
   // Handle case where a new single range must be put in the list and split
   if (state_.single_range_.empty()) {
     auto s = subarray_.get_subarray(current_.start_, current_.end_);
@@ -1354,6 +1358,8 @@ std::string value_to_string(const ByteVecValue& v, const Dimension* dim) {
 }
 
 Status SubarrayPartitioner::split_top_single_range(bool* unsplittable) {
+  TRACE_ENTER();
+
   // For easy reference
   const auto& range = state_.single_range_.front();
 
@@ -1399,6 +1405,8 @@ Status SubarrayPartitioner::split_top_single_range(bool* unsplittable) {
 }
 
 Status SubarrayPartitioner::split_top_multi_range(bool* unsplittable) {
+  TRACE_ENTER();
+
   // For easy reference
   const auto& partition = state_.multi_range_.front();
 
