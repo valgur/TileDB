@@ -260,8 +260,10 @@ Status CompressionFilter::run_forward(
   buffer_ptr->reset_offset();
 
   // Compress all parts.
-  for (auto& part : metadata_parts)
-    RETURN_NOT_OK(compress_part(tile, &part, buffer_ptr, output_metadata));
+  if (compressor_ != Compressor::RLE) {
+    for (auto& part : metadata_parts)
+      RETURN_NOT_OK(compress_part(tile, &part, buffer_ptr, output_metadata));
+  }
   for (auto& part : data_parts)
     RETURN_NOT_OK(compress_part(tile, &part, buffer_ptr, output_metadata));
 
@@ -305,10 +307,11 @@ Status CompressionFilter::run_reverse(
       return decompress_var_string_coords(
           *input, *input_metadata, offsets_tile, *output);
   }
-
-  for (uint32_t i = 0; i < num_metadata_parts; i++)
-    RETURN_NOT_OK(
-        decompress_part(tile, input, metadata_buffer, input_metadata));
+  if (compressor_ != Compressor::RLE) {
+    for (uint32_t i = 0; i < num_metadata_parts; i++)
+      RETURN_NOT_OK(
+          decompress_part(tile, input, metadata_buffer, input_metadata));
+  }
   for (uint32_t i = 0; i < num_data_parts; i++)
     RETURN_NOT_OK(decompress_part(tile, input, data_buffer, input_metadata));
 
