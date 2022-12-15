@@ -157,7 +157,8 @@ Subarray SerializableSubarray::from_capnp(
   // If cap'n proto object has stats set it on c++ object
   stats::Stats* stats = nullptr;
   if (reader.hasStats()) {
-    stats = SerializableStats::from_capnp(query_stats, reader.getStats());
+    stats = SerializableStats::from_capnp(
+        query_stats, "Subarray", reader.getStats());
   }
 
   std::vector<unsigned> relevant_fragments;
@@ -166,8 +167,8 @@ Subarray SerializableSubarray::from_capnp(
     size_t count = rel_fragments.size();
     std::vector<unsigned> rf;
     relevant_fragments.reserve(count);
-    for (size_t i = 0; i < count; i++) {
-      relevant_fragments.emplace_back(relevant_fragments[i]);
+    for (const auto& f : rel_fragments) {
+      relevant_fragments.emplace_back(f);
     }
   }
 

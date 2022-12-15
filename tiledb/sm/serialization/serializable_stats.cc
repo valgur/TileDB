@@ -105,7 +105,9 @@ void SerializableStats::to_capnp(capnp::Stats::Builder& stats_builder) {
 }
 
 stats::Stats* SerializableStats::from_capnp(
-    stats::Stats* parent_stats, const capnp::Stats::Reader& stats_reader) {
+    stats::Stats* parent_stats,
+    const std::string& prefix,
+    const capnp::Stats::Reader& stats_reader) {
   std::unordered_map<std::string, uint64_t> counters;
   if (stats_reader.hasCounters()) {
     auto counters_reader = stats_reader.getCounters();
@@ -122,7 +124,7 @@ stats::Stats* SerializableStats::from_capnp(
     }
   }
 
-  return parent_stats->create_child("Subarray", move(timers), move(counters));
+  return parent_stats->create_child(prefix, move(timers), move(counters));
 }
 
 #endif

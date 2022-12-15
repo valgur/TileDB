@@ -94,10 +94,13 @@ class SerializableStats {
    * Deserializes from a Capnp reader and create a Stats object.
    *
    * @param parent_stats Pointer to the parent stats to create a child from.
+   * @param prefix Prefix to use when creating the child.
    * @param reader Capnp reader to deserialize from.
    */
   static stats::Stats* from_capnp(
-      stats::Stats* parent_stats, const capnp::Stats::Reader& reader);
+      stats::Stats* parent_stats,
+      const std::string& prefix,
+      const capnp::Stats::Reader& reader);
 
  private:
   /* ****************************** */
