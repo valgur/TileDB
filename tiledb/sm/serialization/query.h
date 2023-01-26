@@ -138,7 +138,7 @@ using CopyState =
 Status array_from_query_deserialize(
     const Buffer& serialized_buffer,
     SerializationType serialize_type,
-    Array& array,
+    Array* array,
     StorageManager* storage_manager);
 
 /**

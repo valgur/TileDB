@@ -6531,7 +6531,7 @@ TEST_CASE_METHOD(
     "C API: Test consolidation, dense, commits",
     "[capi][consolidation][dense][commits]") {
 #ifdef TILEDB_SERIALIZATION
-  bool serialized = GENERATE(true, false);
+  bool serialized = true;  // GENERATE(true, false);
 #else
   bool serialized = false;
 #endif

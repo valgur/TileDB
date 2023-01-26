@@ -169,17 +169,20 @@ TEST_CASE_METHOD(
       "miles\"hour", "miles<hour", "miles>hour", "miles\\hour", "miles|hour"};
 
   bool serialized = false;
+  auto fs_vec{vfs_test_get_fs_vec()};
   SECTION("no serialization") {
     serialized = false;
   }
 #ifdef TILEDB_SERIALIZATION
   SECTION("serialization enabled") {
     serialized = true;
+    // Serialization testing doesn't apply to memfs
+    fs_vec.pop_back();
   }
 #endif
 
   for (const auto& attr_name : attr_names) {
-    for (const auto& fs : fs_vec_) {
+    for (const auto& fs : fs_vec) {
       std::string temp_dir = fs->temp_dir();
       std::string array_name = temp_dir + "array-illegal-char";
 
@@ -278,15 +281,18 @@ TEST_CASE_METHOD(
     "C API: Test attributes with tiledb_blob datatype",
     "[capi][attributes][tiledb_blob]") {
   bool serialized = false;
+  auto fs_vec{vfs_test_get_fs_vec()};
   SECTION("no serialization") {
     serialized = false;
   }
 #ifdef TILEDB_SERIALIZATION
   SECTION("serialization enabled") {
     serialized = true;
+    // Serialization testing doesn't apply to memfs
+    fs_vec.pop_back();
   }
 #endif
-  for (const auto& fs : fs_vec_) {
+  for (const auto& fs : fs_vec) {
     std::string temp_dir = fs->temp_dir();
     std::string array_name = temp_dir;
     std::string attr_name = "attr";
@@ -389,15 +395,18 @@ TEST_CASE_METHOD(
     "C API: Test attributes with tiledb_bool datatype",
     "[capi][attributes][tiledb_bool]") {
   bool serialized = false;
+  auto fs_vec{vfs_test_get_fs_vec()};
   SECTION("no serialization") {
     serialized = false;
   }
 #ifdef TILEDB_SERIALIZATION
   SECTION("serialization enabled") {
     serialized = true;
+    // Serialization testing doesn't apply to memfs
+    fs_vec.pop_back();
   }
 #endif
-  for (const auto& fs : fs_vec_) {
+  for (const auto& fs : fs_vec) {
     std::string temp_dir = fs->temp_dir();
     std::string array_name = temp_dir;
     std::string attr_name = "attr";

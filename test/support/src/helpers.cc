@@ -1641,7 +1641,7 @@ int submit_query_wrapper(
     const std::string& array_uri,
     tiledb_query_t** query,
     ServerQueryBuffers& buffers,
-    bool serialize_query,
+    bool serialize,
     bool finalize) {
   int rc = 0;
 #ifndef TILEDB_SERIALIZATION
@@ -1658,7 +1658,7 @@ int submit_query_wrapper(
   return rc;
 #endif
 
-  if (!serialize_query) {
+  if (!serialize) {
     rc = tiledb_query_submit(ctx, *query);
     if (rc != TILEDB_OK) {
       return rc;
@@ -1672,17 +1672,34 @@ int submit_query_wrapper(
     return rc;
   }
 
+  // TODO: check. we'll need to use that for creating fresh contexts
+  tiledb_config_t* config;
+  rc = tiledb_query_get_config(ctx, *query, &config);
+  CHECK(rc == TILEDB_OK);
+
   // Get the query type
   tiledb_query_type_t query_type;
   REQUIRE_SAFE(tiledb_query_get_type(ctx, *query, &query_type) == TILEDB_OK);
 
-  // 1. Client -> Server : Send query request
+  // 1. Client -> Server : Serialize and send query request
   tiledb_query_t* server_deser_query;
   std::vector<uint8_t> serialized;
 
-  rc = tiledb_query_v2_serialize(
-      ctx, array_uri.c_str(), serialized, true, *query, &server_deser_query);
-  REQUIRE_SAFE(rc == TILEDB_OK);
+  // rc = tiledb_query_v2_serialize(
+  //    ctx, array_uri.c_str(), serialized, true, *query, &server_deser_query);
+  // REQUIRE_SAFE(rc == TILEDB_OK);
+  rc = serialize_query(ctx, *query, &serialized, 1);
+  REQUIRE(rc == TILEDB_OK);
+
+  // Server side deserialization
+  tiledb_ctx_t* ctx_query_server_before_submit;
+  tiledb_ctx_alloc(NULL, &ctx_query_server_before_submit);
+  rc = deserialize_array_and_query(
+      ctx_query_server_before_submit,
+      serialized,
+      &server_deser_query,
+      array_uri.c_str(),
+      0);
 
   // This is a feature of the server, not a bug, quoting from query_from_capnp:
   // "On reads, just set null pointers with accurate size so that the
@@ -1690,22 +1707,30 @@ int submit_query_wrapper(
   // Empty buffers will naturally break query_submit so to go on in test we
   // need to allocate here as if we were the server.
   if (query_type == TILEDB_READ) {
-    allocate_query_buffers_server_side(ctx, server_deser_query, buffers);
+    allocate_query_buffers_server_side(
+        ctx_query_server_before_submit, server_deser_query, buffers);
   }
+
+  // tiledb_ctx_free(&ctx_query_server_before_submit);
+  // CHECK(ctx_query_server_before_submit == nullptr);
 
   // 2. Server: Submit query WITHOUT re-opening the array, using under the hood
   // the array found in the deserialized query
-  rc = tiledb_query_submit(ctx, server_deser_query);
+  // tiledb_ctx_t* ctx_query_server_submit;
+  // tiledb_ctx_alloc(config, &ctx_query_server_submit);
+  rc = tiledb_query_submit(ctx_query_server_before_submit, server_deser_query);
   if (rc != TILEDB_OK) {
     return rc;
   }
 
   if (finalize) {
     tiledb_query_status_t status;
-    rc = tiledb_query_get_status(ctx, server_deser_query, &status);
+    rc = tiledb_query_get_status(
+        ctx_query_server_before_submit, server_deser_query, &status);
     CHECK(status == TILEDB_COMPLETED);
 
-    rc = tiledb_query_finalize(ctx, server_deser_query);
+    rc = tiledb_query_finalize(
+        ctx_query_server_before_submit, server_deser_query);
     if (rc != TILEDB_OK) {
       return rc;
     }
@@ -1714,8 +1739,18 @@ int submit_query_wrapper(
   // Serialize the new query and "send it over the network" (server-side)
   // 3. Server -> Client : Send query response
   std::vector<uint8_t> serialized2;
-  rc = tiledb_query_v2_serialize(
-      ctx, array_uri.c_str(), serialized, false, server_deser_query, query);
+  // rc = tiledb_query_v2_serialize(
+  //    ctx, array_uri.c_str(), serialized, false, server_deser_query, query);
+  rc = serialize_query(
+      ctx_query_server_before_submit, server_deser_query, &serialized2, 0);
+  REQUIRE(rc == TILEDB_OK);
+
+  tiledb_ctx_free(&ctx_query_server_before_submit);
+  CHECK(ctx_query_server_before_submit == nullptr);
+
+  // Client side deserialization
+  rc = deserialize_query(ctx, serialized2, *query, 1);
+  REQUIRE(rc == TILEDB_OK);
 
   // Clean up.
   tiledb_query_free(&server_deser_query);

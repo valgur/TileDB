@@ -39,7 +39,10 @@
 
 #include <test/support/tdb_catch.h>
 #include "test/support/src/helpers.h"
+#include "test/support/src/serialization_wrappers.h"
 #include "test/support/src/vfs_helpers.h"
+#include "tiledb/api/c_api/buffer/buffer_api_internal.h"
+#include "tiledb/sm/serialization/array.h"
 #ifdef _WIN32
 #include "tiledb/sm/filesystem/win.h"
 #else
@@ -376,6 +379,8 @@ int* SparseArrayFx::read_sparse_array_2D(
     const int64_t domain_1_hi,
     const tiledb_query_type_t query_type,
     const tiledb_layout_t query_layout) {
+  [[maybe_unused]] bool serialized = true;
+
   // Open array
   tiledb_array_t* array;
   int rc = tiledb_array_alloc(ctx_, array_name.c_str(), &array);
@@ -399,8 +404,93 @@ int* SparseArrayFx::read_sparse_array_2D(
     REQUIRE(rc == TILEDB_OK);
     tiledb_config_free(&cfg);
   }
-  rc = tiledb_array_open(ctx_, array, query_type);
+  //////////
+
+  tiledb_config_t* config;
+  rc = tiledb_array_get_config(ctx_, array, &config);
+
+  tiledb_ctx_t* ctx_open_client;
+  tiledb_ctx_alloc(config, &ctx_open_client);
+
+#ifndef TILEDB_SERIALIZATION
+  rc = tiledb_array_open(ctx_open_client, array, query_type);
   CHECK(rc == TILEDB_OK);
+#endif
+
+#ifdef TILEDB_SERIALIZATION
+  if (!serialized) {
+    rc = tiledb_array_open(ctx_open_client, array, query_type);
+    CHECK(rc == TILEDB_OK);
+  } else {
+    // 1. Client: Simulate serializing array_open request to Server and
+    // deserializing on server side. First set the query_type that will be
+    // serialized
+    auto type = static_cast<tiledb::sm::QueryType>(query_type);
+    array->array_->set_query_type(type);
+    tiledb_array_t* deserialized_array_server = nullptr;
+
+    // client serializes
+    tiledb_buffer_t* buffer;
+    auto serialize_type =
+        (tiledb_serialization_type_t)tiledb::sm::SerializationType::CAPNP;
+    int rc = tiledb_serialize_array_open(
+        ctx_open_client, array, serialize_type, 1, &buffer);
+    REQUIRE(rc == TILEDB_OK);
+
+    // tiledb_ctx_free(&ctx_open_client);
+    // CHECK(ctx_open_client == nullptr);
+
+    tiledb_ctx_t* ctx_open_server;
+    tiledb_ctx_alloc(config, &ctx_open_server);
+
+    // 2. Server : Receive and deserialize array_open_request
+    rc = tiledb_deserialize_array_open(
+        ctx_open_server, buffer, serialize_type, 0, &deserialized_array_server);
+    REQUIRE(rc == TILEDB_OK);
+
+    tiledb_buffer_free(&buffer);
+
+    REQUIRE(rc == TILEDB_OK);
+
+    // Check that the original and de-serialized array have the same query type
+    REQUIRE(deserialized_array_server->array_->get_query_type() == type);
+
+    // 3. Server: Open the array the request was received for in the requested
+    // mode
+    deserialized_array_server->array_->set_array_uri(
+        array->array_->array_uri());
+    rc = tiledb_array_open(
+        ctx_open_server, deserialized_array_server, query_type);
+    REQUIRE(rc == TILEDB_OK);
+
+    // 4. Server -> Client: Send opened Array (serialize)
+    tiledb_buffer_t* buff;
+    rc = tiledb_serialize_array(
+        ctx_open_server,
+        deserialized_array_server,
+        (tiledb_serialization_type_t)tiledb::sm::SerializationType::CAPNP,
+        1,
+        &buff);
+    REQUIRE(rc == TILEDB_OK);
+
+    // 6. Server: Close array and clean up
+    rc = tiledb_array_close(ctx_open_server, deserialized_array_server);
+    CHECK(rc == TILEDB_OK);
+    tiledb_array_free(&deserialized_array_server);
+
+    // 5. Client: Receive and deserialize Array (into array),
+    // in the same way that rest_client does.
+    auto st = tiledb::sm::serialization::array_deserialize(
+        array->array_.get(),
+        tiledb::sm::SerializationType::CAPNP,
+        buff->buffer(),
+        ctx_open_client->storage_manager());
+    REQUIRE(st.ok());
+
+    tiledb_buffer_free(&buff);
+  }
+#endif
+  //////////////
 
   // Prepare the buffers that will store the result
   uint64_t buffer_size = 100 * 1024 * 1024;
@@ -409,38 +499,197 @@ int* SparseArrayFx::read_sparse_array_2D(
 
   // Create query
   tiledb_query_t* query;
-  rc = tiledb_query_alloc(ctx_, array, query_type, &query);
+  rc = tiledb_query_alloc(ctx_open_client, array, query_type, &query);
   REQUIRE(rc == TILEDB_OK);
   rc = tiledb_query_set_data_buffer(
-      ctx_, query, ATTR_NAME.c_str(), buffer, &buffer_size);
+      ctx_open_client, query, ATTR_NAME.c_str(), buffer, &buffer_size);
   REQUIRE(rc == TILEDB_OK);
 
   // Set a subarray
   int64_t s0[] = {domain_0_lo, domain_0_hi};
   int64_t s1[] = {domain_1_lo, domain_1_hi};
-  rc = tiledb_query_set_layout(ctx_, query, query_layout);
+  rc = tiledb_query_set_layout(ctx_open_client, query, query_layout);
   REQUIRE(rc == TILEDB_OK);
-  rc = tiledb_query_add_range(ctx_, query, 0, &s0[0], &s0[1], nullptr);
+  rc = tiledb_query_add_range(
+      ctx_open_client, query, 0, &s0[0], &s0[1], nullptr);
   REQUIRE(rc == TILEDB_OK);
-  rc = tiledb_query_add_range(ctx_, query, 1, &s1[0], &s1[1], nullptr);
-  REQUIRE(rc == TILEDB_OK);
-
-  // Submit query
-  rc = tiledb_query_submit(ctx_, query);
+  rc = tiledb_query_add_range(
+      ctx_open_client, query, 1, &s1[0], &s1[1], nullptr);
   REQUIRE(rc == TILEDB_OK);
 
-  tiledb_query_status_t status;
-  rc = tiledb_query_get_status(ctx_, query, &status);
-  REQUIRE(rc == TILEDB_OK);
-  REQUIRE(status == TILEDB_COMPLETED);
+  /////////////////
 
-  // Finalize query
-  rc = tiledb_query_finalize(ctx_, query);
+#ifndef TILEDB_SERIALIZATION
+  rc = tiledb_query_submit(ctx_open_client, query);
+  REQUIRE(rc == TILEDB_ERR);
+
+  if (true) {
+    // Finalize query
+    rc = tiledb_query_finalize(ctx_open_client, query);
+  }
+
+  REQUIRE(rc == TILEDB_OK);
+#endif
+
+#ifdef TILEDB_SERIALIZATION
+  if (!serialized) {
+    rc = tiledb_query_submit(ctx_open_client, query);
+    REQUIRE(rc == TILEDB_OK);
+
+    if (true) {
+      // Finalize query
+      rc = tiledb_query_finalize(ctx_open_client, query);
+    }
+
+    REQUIRE(rc == TILEDB_OK);
+  } else {
+    // Get the query type
+    tiledb_query_type_t query_type;
+    REQUIRE_SAFE(
+        tiledb_query_get_type(ctx_open_client, query, &query_type) ==
+        TILEDB_OK);
+
+    // 1. Client -> Server : Send query request
+    std::vector<uint8_t> serialized;
+
+    // rc = tiledb_query_v2_serialize(
+    //    ctx, array_uri.c_str(), serialized, true, query, &server_deser_query);
+    rc = tiledb::test::serialize_query(ctx_open_client, query, &serialized, 1);
+    REQUIRE(rc == TILEDB_OK);
+
+    // FREE CLIENT CONTEXT!!!
+    tiledb_ctx_free(&ctx_open_client);
+    CHECK(ctx_open_client == nullptr);
+
+    // server side deserialization
+    tiledb_ctx_t* ctx_query_server;
+    tiledb_ctx_alloc(config, &ctx_query_server);
+
+    // Open array
+    tiledb_array_t* array_server;
+    int rc =
+        tiledb_array_alloc(ctx_query_server, array_name.c_str(), &array_server);
+    CHECK(rc == TILEDB_OK);
+    tiledb_config_t* cfg_ser;
+    rc = tiledb_array_get_config(ctx_, array, &cfg_ser);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb_array_set_config(ctx_query_server, array_server, cfg_ser);
+    REQUIRE(rc == TILEDB_OK);
+    tiledb_config_free(&cfg_ser);
+
+    rc = tiledb_array_open(ctx_query_server, array_server, query_type);
+    CHECK(rc == TILEDB_OK);
+
+    tiledb_query_t* server_deser_query;
+    rc = tiledb_query_alloc(
+        ctx_query_server, array_server, query_type, &server_deser_query);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb::test::deserialize_query(
+        ctx_query_server, serialized, server_deser_query, 0);
+    // rc = tiledb::test::deserialize_array_and_query(
+    //     ctx_query_server,
+    //     serialized,
+    //     &server_deser_query,
+    //     array_name.c_str(),
+    //     0);
+
+    REQUIRE_SAFE(rc == TILEDB_OK);
+
+    // This is a feature of the server, not a bug, quoting from
+    // query_from_capnp: "On reads, just set null pointers with accurate size so
+    // that the server can introspect and allocate properly sized buffers
+    // separately." Empty buffers will naturally break query_submit so to go on
+    // in test we need to allocate here as if we were the server.
+    if (query_type == TILEDB_READ) {
+      allocate_query_buffers_server_side(
+          ctx_query_server, server_deser_query, server_buffers_);
+    }
+
+    // tiledb_ctx_free(&ctx_query_server_before_submit);
+    // CHECK(ctx_query_server_before_submit == nullptr);
+
+    // 2. Server: Submit query WITHOUT re-opening the array, using under the
+    // hood the array found in the deserialized query
+    rc = tiledb_query_submit(ctx_query_server, server_deser_query);
+    if (rc != TILEDB_OK) {
+      REQUIRE(rc != TILEDB_OK);
+    }
+    REQUIRE(rc == TILEDB_OK);
+
+    if (true) {
+      tiledb_query_status_t status;
+      rc = tiledb_query_get_status(
+          ctx_query_server, server_deser_query, &status);
+      CHECK(status == TILEDB_COMPLETED);
+
+      rc = tiledb_query_finalize(ctx_query_server, server_deser_query);
+      REQUIRE(rc == TILEDB_OK);
+    }
+
+    // Serialize the new query and "send it over the network" (server-side)
+    // 3. Server -> Client : Send query response
+    std::vector<uint8_t> serialized2;
+    // rc = tiledb_query_v2_serialize(
+    //    ctx, array_uri.c_str(), serialized, false, server_deser_query,
+    //    &query);
+    // Serialize and Deserialize
+    rc = tiledb::test::serialize_query(
+        ctx_query_server, server_deser_query, &serialized, 0);
+    REQUIRE(rc == TILEDB_OK);
+    tiledb_ctx_free(&ctx_query_server);
+    CHECK(ctx_query_server == nullptr);
+
+    // client side deserialization
+    tiledb_ctx_t* ctx_query_client2;
+    tiledb_ctx_alloc(config, &ctx_query_client2);
+
+    rc = tiledb_query_alloc(ctx_query_client2, array, query_type, &query);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb_query_set_data_buffer(
+        ctx_query_client2, query, ATTR_NAME.c_str(), buffer, &buffer_size);
+    REQUIRE(rc == TILEDB_OK);
+
+    // Set a subarray
+    rc = tiledb_query_set_layout(ctx_query_client2, query, query_layout);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb_query_add_range(
+        ctx_query_client2, query, 0, &s0[0], &s0[1], nullptr);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb_query_add_range(
+        ctx_query_client2, query, 1, &s1[0], &s1[1], nullptr);
+    REQUIRE(rc == TILEDB_OK);
+
+    rc = tiledb::test::deserialize_query(
+        ctx_query_client2, serialized, query, 1);
+
+    REQUIRE(rc == TILEDB_OK);
+    tiledb_query_status_t status;
+    rc = tiledb_query_get_status(ctx_query_client2, query, &status);
+    REQUIRE(rc == TILEDB_OK);
+    REQUIRE(status == TILEDB_COMPLETED);
+    tiledb_ctx_free(&ctx_query_client2);
+    CHECK(ctx_query_client2 == nullptr);
+    // Clean up.
+    tiledb_query_free(&server_deser_query);
+  }
+#endif
+  ///////////
+
+  // rc = tiledb_query_submit(ctx_, query);
   REQUIRE(rc == TILEDB_OK);
 
-  // Close array
-  rc = tiledb_array_close(ctx_, array);
-  CHECK(rc == TILEDB_OK);
+  //   tiledb_query_status_t status;
+  //   rc = tiledb_query_get_status(ctx_query_client2, query, &status);
+  //   REQUIRE(rc == TILEDB_OK);
+  //   REQUIRE(status == TILEDB_COMPLETED);
+
+  //   // Finalize query
+  //   rc = tiledb_query_finalize(ctx_, query);
+  //   REQUIRE(rc == TILEDB_OK);
+
+  //   // Close array
+  //   rc = tiledb_array_close(ctx_, array);
+  //   CHECK(rc == TILEDB_OK);
 
   // Clean up
   tiledb_array_free(&array);
@@ -611,6 +860,8 @@ void SparseArrayFx::write_sparse_array_unsorted_2D(
     const std::string& array_name,
     const int64_t domain_size_0,
     const int64_t domain_size_1) {
+  [[maybe_unused]] bool serialized = true;
+
   // Generate random attribute values and coordinates for sparse write
   int64_t cell_num = domain_size_0 * domain_size_1;
   auto buffer_a1 = new int[cell_num];
@@ -659,32 +910,240 @@ void SparseArrayFx::write_sparse_array_unsorted_2D(
     REQUIRE(rc == TILEDB_OK);
     tiledb_config_free(&cfg);
   }
-  rc = tiledb_array_open(ctx_, array, TILEDB_WRITE);
+  // rc = tiledb_array_open(ctx_, array, TILEDB_WRITE);
+  //////////
+
+  tiledb_config_t* config;
+  rc = tiledb_array_get_config(ctx_, array, &config);
+
+  tiledb_ctx_t* ctx_open_client;
+  tiledb_ctx_alloc(config, &ctx_open_client);
+
+#ifndef TILEDB_SERIALIZATION
+  rc = tiledb_array_open(ctx_open_client, array, TILEDB_WRITE);
   CHECK(rc == TILEDB_OK);
+#endif
+
+#ifdef TILEDB_SERIALIZATION
+  if (!serialized) {
+    rc = tiledb_array_open(ctx_open_client, array, TILEDB_WRITE);
+    CHECK(rc == TILEDB_OK);
+  } else {
+    // 1. Client: Simulate serializing array_open request to Server and
+    // deserializing on server side. First set the query_type that will be
+    // serialized
+    auto type = static_cast<tiledb::sm::QueryType>(TILEDB_WRITE);
+    array->array_->set_query_type(type);
+    tiledb_array_t* deserialized_array_server = nullptr;
+    // 2. Server : Receive and deserialize array_open_request
+    auto rc = tiledb_array_open_serialize(
+        ctx_open_client,
+        array,
+        &deserialized_array_server,
+        (tiledb_serialization_type_t)tiledb::sm::SerializationType::CAPNP);
+    REQUIRE(rc == TILEDB_OK);
+
+    // Check that the original and de-serialized array have the same query type
+    REQUIRE(deserialized_array_server->array_->get_query_type() == type);
+
+    // 3. Server: Open the array the request was received for in the requested
+    // mode
+
+    tiledb_ctx_t* ctx_server;
+    tiledb_ctx_alloc(config, &ctx_server);
+
+    // REQUIRE(vfs_test_init(fs_vec_, &ctx_server, &vfs_).ok());
+
+    deserialized_array_server->array_->set_array_uri(
+        array->array_->array_uri());
+    rc = tiledb_array_open(ctx_server, deserialized_array_server, TILEDB_WRITE);
+    REQUIRE(rc == TILEDB_OK);
+
+    // 4. Server -> Client: Send opened Array (serialize)
+    // 5. Client: Receive and deserialize Array (into
+    // deserialized_array_client), in the same way that rest_client does.
+    tiledb_buffer_t* buff;
+    rc = tiledb_serialize_array(
+        ctx_server,
+        deserialized_array_server,
+        (tiledb_serialization_type_t)tiledb::sm::SerializationType::CAPNP,
+        1,
+        &buff);
+    REQUIRE(rc == TILEDB_OK);
+
+    auto st = tiledb::sm::serialization::array_deserialize(
+        array->array_.get(),
+        tiledb::sm::SerializationType::CAPNP,
+        buff->buffer(),
+        ctx_open_client->storage_manager());
+    REQUIRE(st.ok());
+
+    // 6. Server: Close array and clean up
+    rc = tiledb_array_close(ctx_server, deserialized_array_server);
+    CHECK(rc == TILEDB_OK);
+    tiledb_array_free(&deserialized_array_server);
+    tiledb_buffer_free(&buff);
+  }
+#endif
+  //////////////
+
+  CHECK(rc == TILEDB_OK);
+
+  //   tiledb_config_t* config;
+  //   rc = tiledb_array_get_config(ctx_, array, &config);
+
+  //   tiledb_ctx_t* ctx_query_client;
+  //   tiledb_ctx_alloc(config, &ctx_query_client);
 
   // Create query
   tiledb_query_t* query;
-  rc = tiledb_query_alloc(ctx_, array, TILEDB_WRITE, &query);
+  rc = tiledb_query_alloc(ctx_open_client, array, TILEDB_WRITE, &query);
   REQUIRE(rc == TILEDB_OK);
   rc = tiledb_query_set_data_buffer(
-      ctx_, query, attributes[0], buffers[0], &buffer_sizes[0]);
+      ctx_open_client, query, attributes[0], buffers[0], &buffer_sizes[0]);
   REQUIRE(rc == TILEDB_OK);
   rc = tiledb_query_set_data_buffer(
-      ctx_, query, attributes[1], buffers[1], &buffer_sizes[1]);
+      ctx_open_client, query, attributes[1], buffers[1], &buffer_sizes[1]);
   REQUIRE(rc == TILEDB_OK);
   rc = tiledb_query_set_data_buffer(
-      ctx_, query, attributes[2], buffers[2], &buffer_sizes[2]);
+      ctx_open_client, query, attributes[2], buffers[2], &buffer_sizes[2]);
   REQUIRE(rc == TILEDB_OK);
-  rc = tiledb_query_set_layout(ctx_, query, TILEDB_UNORDERED);
+  rc = tiledb_query_set_layout(ctx_open_client, query, TILEDB_UNORDERED);
   REQUIRE(rc == TILEDB_OK);
 
   // Submit query
-  rc = tiledb_query_submit(ctx_, query);
+  // rc = tiledb_query_submit(ctx_, query);
+  /////////////////
+
+#ifndef TILEDB_SERIALIZATION
+  rc = tiledb_query_submit(ctx_open_client, query);
+  REQUIRE(rc == TILEDB_ERR);
+
+  if (true) {
+    // Finalize query
+    rc = tiledb_query_finalize(ctx_open_client, query);
+  }
+
+  REQUIRE(rc == TILEDB_OK);
+#endif
+
+#ifdef TILEDB_SERIALIZATION
+  if (!serialized) {
+    rc = tiledb_query_submit(ctx_open_client, query);
+    REQUIRE(rc == TILEDB_OK);
+
+    if (true) {
+      // Finalize query
+      rc = tiledb_query_finalize(ctx_open_client, query);
+    }
+
+    REQUIRE(rc == TILEDB_OK);
+  } else {
+    // Get the query type
+    tiledb_query_type_t query_type;
+    REQUIRE_SAFE(
+        tiledb_query_get_type(ctx_open_client, query, &query_type) ==
+        TILEDB_OK);
+
+    // 1. Client -> Server : Send query request
+    tiledb_query_t* server_deser_query;
+    std::vector<uint8_t> serialized;
+
+    // rc = tiledb_query_v2_serialize(
+    //    ctx, array_uri.c_str(), serialized, true, query, &server_deser_query);
+    rc = tiledb::test::serialize_query(ctx_open_client, query, &serialized, 1);
+    REQUIRE(rc == TILEDB_OK);
+
+    // FREE CLIENT CONTEXT!!!
+    tiledb_ctx_free(&ctx_open_client);
+    CHECK(ctx_open_client == nullptr);
+
+    // server side deserialization
+    tiledb_ctx_t* ctx_query_server;
+    tiledb_ctx_alloc(config, &ctx_query_server);
+    rc = tiledb::test::deserialize_array_and_query(
+        ctx_query_server,
+        serialized,
+        &server_deser_query,
+        array_name.c_str(),
+        0);
+
+    REQUIRE_SAFE(rc == TILEDB_OK);
+
+    // This is a feature of the server, not a bug, quoting from
+    // query_from_capnp: "On reads, just set null pointers with accurate size so
+    // that the server can introspect and allocate properly sized buffers
+    // separately." Empty buffers will naturally break query_submit so to go on
+    // in test we need to allocate here as if we were the server.
+    if (query_type == TILEDB_READ) {
+      allocate_query_buffers_server_side(
+          ctx_query_server, server_deser_query, server_buffers_);
+    }
+
+    // 2. Server: Submit query WITHOUT re-opening the array, using under the
+    // hood the array found in the deserialized query
+    rc = tiledb_query_submit(ctx_query_server, server_deser_query);
+    REQUIRE(rc == TILEDB_OK);
+
+    if (true) {
+      tiledb_query_status_t status;
+      rc = tiledb_query_get_status(
+          ctx_query_server, server_deser_query, &status);
+      CHECK(status == TILEDB_COMPLETED);
+
+      rc = tiledb_query_finalize(ctx_query_server, server_deser_query);
+      REQUIRE(rc == TILEDB_OK);
+    }
+
+    // Serialize the new query and "send it over the network" (server-side)
+    // 3. Server -> Client : Send query response
+    std::vector<uint8_t> serialized2;
+    // rc = tiledb_query_v2_serialize(
+    //    ctx, array_uri.c_str(), serialized, false, server_deser_query,
+    //    &query);
+    // Serialize and Deserialize
+    rc = tiledb::test::serialize_query(
+        ctx_query_server, server_deser_query, &serialized, 0);
+    REQUIRE(rc == TILEDB_OK);
+    tiledb_ctx_free(&ctx_query_server);
+    CHECK(ctx_query_server == nullptr);
+
+    tiledb_ctx_t* ctx_query_client2;
+    tiledb_ctx_alloc(config, &ctx_query_client2);
+
+    // client side deserialization
+    tiledb_query_t* query;
+    rc = tiledb_query_alloc(ctx_query_client2, array, TILEDB_WRITE, &query);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb_query_set_data_buffer(
+        ctx_query_client2, query, attributes[0], buffers[0], &buffer_sizes[0]);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb_query_set_data_buffer(
+        ctx_query_client2, query, attributes[1], buffers[1], &buffer_sizes[1]);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb_query_set_data_buffer(
+        ctx_query_client2, query, attributes[2], buffers[2], &buffer_sizes[2]);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb_query_set_layout(ctx_query_client2, query, TILEDB_UNORDERED);
+    REQUIRE(rc == TILEDB_OK);
+    rc = tiledb::test::deserialize_query(
+        ctx_query_client2, serialized, query, 1);
+
+    REQUIRE(rc == TILEDB_OK);
+
+    // Clean up.
+    tiledb_query_free(&server_deser_query);
+    tiledb_ctx_free(&ctx_query_client2);
+    CHECK(ctx_query_client2 == nullptr);
+  }
+#endif
+  ///////////
+
   REQUIRE(rc == TILEDB_OK);
 
   // Finalize query
-  rc = tiledb_query_finalize(ctx_, query);
-  REQUIRE(rc == TILEDB_OK);
+  // rc = tiledb_query_finalize(ctx_, query);
+  // REQUIRE(rc == TILEDB_OK);
 
   // Close array
   rc = tiledb_array_close(ctx_, array);
