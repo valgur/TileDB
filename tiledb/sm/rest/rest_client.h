@@ -419,6 +419,8 @@ class RestClient {
   Status update_attribute_buffer_sizes(
       const serialization::CopyState& copy_state, Query* query) const;
 
+  Status reset_attribute_buffer_sizes(Query* query) const;
+
   /**
    * Helper function encapsulating the functionality of looking up for cached
    * redirected rest server addresses to avoid the redirection overhead

@@ -506,6 +506,8 @@ Status RestClient::submit_query_to_rest(const URI& uri, Query* query) {
   // same user buffers.
   serialization::CopyState copy_state;
 
+  RETURN_NOT_OK(reset_attribute_buffer_sizes(query));
+
   RETURN_NOT_OK(post_query_submit(uri, query, &copy_state));
 
   // Now need to update the buffer sizes to the actual copied data size so that
@@ -956,6 +958,30 @@ Status RestClient::update_attribute_buffer_sizes(
     bool nullable = query->array_schema().is_nullable(name);
     if (nullable && query_buffer.validity_vector_.buffer_size()) {
       *query_buffer.validity_vector_.buffer_size() = state.validity_size;
+    }
+  }
+
+  return Status::Ok();
+}
+
+Status RestClient::reset_attribute_buffer_sizes(Query* query) const {
+  // Applicable only to reads
+  if (query->type() != QueryType::READ) {
+    return Status::Ok();
+  }
+
+  for (const auto& name : query->buffer_names()) {
+    auto query_buffer = query->buffer(name);
+    if (query_buffer.buffer_var_size_ != nullptr) {
+      *query_buffer.buffer_var_size_ = query_buffer.original_buffer_var_size_;
+      *query_buffer.buffer_size_ = query_buffer.original_buffer_size_;
+    } else if (query_buffer.buffer_size_ != nullptr)
+      *query_buffer.buffer_size_ = query_buffer.original_buffer_size_;
+
+    bool nullable = query->array_schema().is_nullable(name);
+    if (nullable && query_buffer.validity_vector_.buffer_size()) {
+      *query_buffer.validity_vector_.buffer_size() =
+          query_buffer.original_validity_vector_size_;
     }
   }
 
