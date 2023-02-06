@@ -72,6 +72,11 @@ class ContextResources {
   /*                API                */
   /* ********************************* */
 
+  /** Returns the config object. */
+  [[nodiscard]] inline Config& config() const {
+    return config_;
+  }
+
   /** Returns the thread pool for compute-bound tasks. */
   [[nodiscard]] inline ThreadPool& compute_tp() const {
     return compute_tp_;
@@ -95,6 +100,9 @@ class ContextResources {
   /* ********************************* */
   /*         PRIVATE ATTRIBUTES        */
   /* ********************************* */
+
+  /** The configuration for this ContextResources */
+  mutable Config config_;
 
   /** The thread pool for compute-bound tasks. */
   mutable ThreadPool compute_tp_;

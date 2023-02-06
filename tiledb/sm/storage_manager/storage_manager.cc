@@ -2154,7 +2154,7 @@ StorageManagerCanonical::load_fragment_metadata(
       RETURN_NOT_OK(vfs()->is_file(coords_uri, &sparse));
       metadata = make_shared<FragmentMetadata>(
           HERE(),
-          this,
+          &resources_,
           memory_tracker,
           array_schema_latest,
           sf.uri_,
@@ -2163,7 +2163,7 @@ StorageManagerCanonical::load_fragment_metadata(
     } else {  // Format version > 2
       metadata = make_shared<FragmentMetadata>(
           HERE(),
-          this,
+          &resources_,
           memory_tracker,
           array_schema_latest,
           sf.uri_,

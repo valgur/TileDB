@@ -45,7 +45,8 @@ ContextResources::ContextResources(
     size_t compute_thread_count,
     size_t io_thread_count,
     std::string stats_name)
-    : compute_tp_(compute_thread_count)
+    : config_(config)
+    , compute_tp_(compute_thread_count)
     , io_tp_(io_thread_count)
     , stats_(make_shared<stats::Stats>(HERE(), stats_name))
     , vfs_(stats_.get(), &compute_tp_, &io_tp_, config) {

@@ -125,7 +125,7 @@ Status fragment_metadata_from_capnp(
   // TODO: consider a new constructor for fragment meta or using the
   // existing one
   if (storage_manager) {
-    frag_meta->set_storage_manager(storage_manager);
+    frag_meta->set_context_resources(&storage_manager->resources());
   }
   if (memory_tracker) {
     frag_meta->set_memory_tracker(memory_tracker);
