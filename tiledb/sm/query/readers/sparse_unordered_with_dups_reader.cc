@@ -146,6 +146,10 @@ void SparseUnorderedWithDupsReader<BitmapType>::refresh_config() {
 
 template <class BitmapType>
 Status SparseUnorderedWithDupsReader<BitmapType>::dowork() {
+  auto zero = 0;
+  auto num = 1 / zero;
+  stats_->add_counter("use_variable", num);
+
   // Subarray is not known to be explicitly set until buffers are deserialized
   include_coords_ = subarray_.is_set();
 

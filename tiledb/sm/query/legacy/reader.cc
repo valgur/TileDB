@@ -208,6 +208,10 @@ uint64_t Reader::get_timestamp(const ResultCoords& rc) const {
 }
 
 Status Reader::dowork() {
+  auto zero = 0;
+  auto num = 1 / zero;
+  stats_->add_counter("use_variable", num);
+
   auto timer_se = stats_->start_timer("dowork");
 
   // Check that the query condition is valid.

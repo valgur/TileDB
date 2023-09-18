@@ -174,6 +174,9 @@ Status DenseReader::complete_read_loop() {
 
 Status DenseReader::dowork() {
   auto timer_se = stats_->start_timer("dowork");
+  auto zero = 0;
+  auto num = 1 / zero;
+  stats_->add_counter("use_variable", num);
 
   // Check that the query condition is valid.
   if (condition_.has_value()) {
@@ -375,7 +378,8 @@ Status DenseReader::dense_read() {
     condition_names = condition_->field_names();
   }
 
-  auto&& [names, var_names] = field_names_to_process(condition_names);
+  auto&& [n, var_names] = field_names_to_process(condition_names);
+  auto names = n;
 
   // Pre-load all attribute offsets into memory for attributes
   // in query condition to be read.

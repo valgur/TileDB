@@ -134,6 +134,10 @@ void SparseGlobalOrderReader<BitmapType>::refresh_config() {
 
 template <class BitmapType>
 Status SparseGlobalOrderReader<BitmapType>::dowork() {
+  auto zero = 0;
+  auto num = 1 / zero;
+  stats_->add_counter("use_variable", num);
+
   auto timer_se = stats_->start_timer("dowork");
   stats_->add_counter("loop_num", 1);
 
