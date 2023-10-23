@@ -31,6 +31,7 @@
  */
 
 #include "tiledb/sm/query/readers/reader_base.h"
+#include <fstream>
 #include "tiledb/common/logger.h"
 #include "tiledb/sm/array/array.h"
 #include "tiledb/sm/array_schema/array_schema.h"
@@ -607,6 +608,29 @@ std::vector<FilteredData> ReaderBase::read_tiles(
   std::vector<ThreadPool::Task> read_tasks;
   filtered_data.reserve(names.size());
 
+  auto total_budget =
+      config_.get<uint64_t>("sm.mem.total_budget", Config::must_find);
+  auto memory_budget =
+      config_.get<uint64_t>("sm.memory_budget", Config::must_find);
+  auto memory_budget_var =
+      config_.get<uint64_t>("sm.memory_budget_var", Config::must_find);
+  std::ofstream log;
+  log.open("/home/ubuntu/profile/core_log.txt", std::ios_base::app);
+  if (!log.is_open()) {
+    throw std::runtime_error("Failed to open log.");
+  }
+  std::stringstream this_log;
+  this_log << "Memory budget for array at URI '" << array_schema_.uri().to_string()
+      << "':" << std::endl;
+  this_log << "\t"
+      << "sm.mem.total_budget = " << total_budget << std::endl;
+  this_log << "\t"
+      << "sm.memory_budget = " << memory_budget << std::endl;
+  this_log << "\t"
+      << "sm.memory_budget_var = " << memory_budget_var << std::endl
+      << std::endl;
+  uint64_t all_tiles_size_total = 0;
+
   // Run all attributes independently.
   for (auto name : names) {
     // Create the filtered data blocks. This will also kick off the read for the
@@ -626,6 +650,9 @@ std::vector<FilteredData> ReaderBase::read_tiles(
         nullable,
         storage_manager_,
         read_tasks);
+
+    // Result tile totals for this field
+    uint64_t var = 0, fixed = 0, validity = 0, total = 0;
 
     // Go through each tiles and create the attribute tiles.
     for (auto tile : result_tiles) {
@@ -660,6 +687,12 @@ std::vector<FilteredData> ReaderBase::read_tiles(
       // Initialize the tile(s)
       const format_version_t format_version{fragment->format_version()};
       const auto is_dim{array_schema->is_dim(name)};
+
+      fixed += tile_sizes.tile_size();
+      var += tile_sizes.tile_var_size();
+      validity += tile_sizes.tile_validity_size();
+      total += fixed + var + validity;
+
       if (is_dim) {
         const uint64_t dim_num{array_schema->dim_num()};
         for (uint64_t d = 0; d < dim_num; ++d) {
@@ -674,7 +707,23 @@ std::vector<FilteredData> ReaderBase::read_tiles(
             format_version, array_schema_, name, tile_sizes, tile_data);
       }
     }
+
+    if (total > 0) {
+      this_log << "\tTile size for '" << name << "': " << std::endl;
+      this_log << "\ttotal:" << total << std::endl;
+      this_log << "\tfixed:" << fixed << std::endl;
+      this_log << "\tvar:" << var << std::endl;
+      this_log << "\tvalidity:" << validity << std::endl << std::endl;
+      all_tiles_size_total += total;
+    }
   }
+  this_log << "\tTotal tile sizes allocated: " << all_tiles_size_total << std::endl;
+  if (all_tiles_size_total > total_budget) {
+    this_log << "\t!!!!! The above tile exceeds budget set: " << all_tiles_size_total
+        << " > " << total_budget << std::endl;
+  }
+  log << this_log.str() << std::endl;
+  log.close();
 
   stats_->add_counter("num_tiles_read", num_tiles_read);
 

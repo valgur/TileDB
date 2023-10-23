@@ -149,6 +149,9 @@ class ResultTile {
 
     /** @return The fixed tile in memory size. */
     inline uint64_t tile_var_size() const {
+      if (!tile_var_size_.has_value()) {
+        return 0;
+      }
       return tile_var_size_.value();
     }
 
@@ -164,6 +167,9 @@ class ResultTile {
 
     /** @return The validity tile in memory size. */
     inline uint64_t tile_validity_size() const {
+      if (!tile_validity_size_.has_value()) {
+        return 0;
+      }
       return tile_validity_size_.value();
     }
 
