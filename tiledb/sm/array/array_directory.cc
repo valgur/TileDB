@@ -890,7 +890,7 @@ void ArrayDirectory::load_array_schema_uris() {
   }
 
   // Compute all the array schema URIs plus the latest array schema URI
-  throw_if_not_ok(compute_array_schema_uris(array_schema_dir_uris));
+  compute_array_schema_uris(array_schema_dir_uris);
 }
 
 void ArrayDirectory::load_commits_uris_to_consolidate(
@@ -1208,7 +1208,7 @@ ArrayDirectory::compute_filtered_uris(
   return {Status::Ok(), filtered_uris};
 }
 
-Status ArrayDirectory::compute_array_schema_uris(
+void ArrayDirectory::compute_array_schema_uris(
     const std::vector<URI>& array_schema_dir_uris) {
   if (mode_ == ArrayDirectoryMode::SCHEMA_ONLY) {
     // If not in schema only mode, this is done using the listing from the root
@@ -1216,25 +1216,53 @@ Status ArrayDirectory::compute_array_schema_uris(
     // Optionally add the old array schema from the root array folder
     auto old_schema_uri = uri_.join_path(constants::array_schema_filename);
     bool has_file = false;
-    RETURN_NOT_OK(resources_.get().vfs().is_file(old_schema_uri, &has_file));
+    throw_if_not_ok(resources_.get().vfs().is_file(old_schema_uri, &has_file));
     if (has_file) {
       array_schema_uris_.push_back(old_schema_uri);
     }
   }
 
-  // Optionally add the new array schemas from the array schema directory
-  if (!array_schema_dir_uris.empty()) {
-    array_schema_uris_.reserve(
-        array_schema_uris_.size() + array_schema_dir_uris.size());
-    for (auto& uri : array_schema_dir_uris) {
-      if (uri.last_path_part() == constants::array_enumerations_dir_name) {
-        continue;
-      }
-      array_schema_uris_.push_back(uri);
-    }
+  // No URIs to filter so we're done.
+  if (array_schema_dir_uris.empty()) {
+    return;
   }
 
-  return Status::Ok();
+  // Create a vector of timestamps, URI pairs.
+  std::vector<std::pair<uint64_t, URI>> ts_uris;
+  for (auto& uri : array_schema_dir_uris) {
+    if (uri.last_path_part() == constants::array_enumerations_dir_name) {
+      continue;
+    }
+
+    std::pair<uint64_t, uint64_t> timestamp_range;
+    throw_if_not_ok(utils::parse::get_timestamp_range(uri, &timestamp_range));
+
+    ts_uris.push_back({timestamp_range.second, uri});
+  }
+
+  std::sort(ts_uris.begin(), ts_uris.end(), [](auto lhs, auto rhs) {
+    return lhs.first < rhs.first;
+  });
+
+  std::vector<URI> uris;
+  for (auto [ts, uri] : ts_uris) {
+    // If we're in read mode and time traveling, only include schemas created
+    // before the end timestamp.
+    if (mode_ == ArrayDirectoryMode::READ && ts > timestamp_end_) {
+      continue;
+    }
+
+    uris.push_back(uri);
+  }
+
+  // Copy the releavant schema URIs to our list.
+  std::copy(uris.begin(), uris.end(), std::back_inserter(array_schema_uris_));
+
+  // Throw an exception if we time traveled to before the first schema.
+  if (array_schema_uris_.size() == 0 && ts_uris.size() > 0) {
+    throw ArrayDirectoryException(
+        "Error time traveling before the first schema existed.");
+  }
 }
 
 bool ArrayDirectory::is_vacuum_file(const URI& uri) const {

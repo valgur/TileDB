@@ -767,10 +767,9 @@ class ArrayDirectory {
    * Computes and sets the final vector of array schema URIs, and the
    * latest array schema URI, given `array_schema_dir_uris`.
    *
-   * @return Status.
+   * @param array_schema_dir_uris The contents of the __schema directory.
    */
-  Status compute_array_schema_uris(
-      const std::vector<URI>& array_schema_dir_uris);
+  void compute_array_schema_uris(const std::vector<URI>& array_schema_dir_uris);
 
   /**
    * Checks if a fragment overlaps with the array directory timestamp

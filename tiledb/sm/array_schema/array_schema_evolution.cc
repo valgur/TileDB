@@ -49,6 +49,7 @@
 #include "tiledb/sm/enums/layout.h"
 #include "tiledb/sm/filter/compression_filter.h"
 #include "tiledb/sm/misc/hilbert.h"
+#include "tiledb/sm/misc/tdb_time.h"
 
 #include <cassert>
 #include <iostream>
@@ -141,13 +142,13 @@ shared_ptr<ArraySchema> ArraySchemaEvolution::evolve_schema(
   }
 
   // Set timestamp, if specified
-  if (std::get<0>(timestamp_range_) != 0) {
-    throw_if_not_ok(schema.get()->set_timestamp_range(timestamp_range_));
-    throw_if_not_ok(schema->generate_uri(timestamp_range_));
-  } else {
-    // Generate new schema URI
-    throw_if_not_ok(schema->generate_uri());
+  if (timestamp_range_.first == 0) {
+    auto now = utils::time::timestamp_now_ms();
+    timestamp_range_ = {now, now};
   }
+
+  throw_if_not_ok(schema->set_timestamp_range(timestamp_range_));
+  schema->generate_uri();
 
   return schema;
 }

@@ -559,17 +559,13 @@ class ArraySchema {
   /** Returns the array schema uri. */
   const URI& uri() const;
 
-  /** Returns the schema name. If it is not set, will build it. */
-  const std::string& name() const;
-
-  /** Set the schema name. */
-  void set_name(const std::string& name);
+  /** Returns the schema name. */
+  inline const std::string& name() const {
+    return name_;
+  }
 
   /** Generates a new array schema URI. */
-  Status generate_uri();
-
-  /** Generates a new array schema URI with specified timestamp range. */
-  Status generate_uri(const std::pair<uint64_t, uint64_t>& timestamp_range);
+  void generate_uri();
 
  private:
   /* ********************************* */
