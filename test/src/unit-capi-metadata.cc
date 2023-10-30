@@ -136,7 +136,11 @@ void CMetadataFx::create_default_array_1d() {
        tiledb::test::Compressor(TILEDB_FILTER_LZ4, -1)},
       TILEDB_ROW_MAJOR,
       TILEDB_ROW_MAJOR,
-      2);
+      2,
+      false,
+      false,
+      nullopt,
+      0);
 }
 
 void CMetadataFx::create_default_array_1d_with_key() {
@@ -160,7 +164,8 @@ void CMetadataFx::create_default_array_1d_with_key() {
        tiledb::test::Compressor(TILEDB_FILTER_LZ4, -1)},
       TILEDB_ROW_MAJOR,
       TILEDB_ROW_MAJOR,
-      2);
+      2,
+      0);
 }
 
 /* ********************************* */

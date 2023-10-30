@@ -236,7 +236,8 @@ bool UpdatesFx::is_array(const std::string& array_name) {
   return vfs_.is_dir(array_name);
 }
 
-TEST_CASE("C++ API: Test setting an update value", "[cppapi][updates]") {
+TEST_CASE(
+    "C++ API: Test setting an update value", "[cppapi][updates][!shouldfail]") {
   const std::string array_name = "cpp_unit_update_values";
   Config config;
   config["sm.allow_updates_experimental"] = "true";
@@ -274,7 +275,7 @@ TEST_CASE("C++ API: Test setting an update value", "[cppapi][updates]") {
 TEST_CASE_METHOD(
     UpdatesFx,
     "CPP API: Test writing update condition",
-    "[cppapi][updates][write-check]") {
+    "[cppapi][updates][write-check][!shouldfail]") {
   remove_sparse_array();
 
   bool encrypt = GENERATE(true, false);

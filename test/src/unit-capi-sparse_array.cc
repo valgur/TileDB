@@ -855,6 +855,10 @@ void SparseArrayFx::create_sparse_array(
   tiledb_array_schema_t* array_schema;
   rc = tiledb_array_schema_alloc(ctx_, TILEDB_SPARSE, &array_schema);
   CHECK(rc == TILEDB_OK);
+
+  // Create our schema at time 0 for time traveling tests
+  throw_if_not_ok(array_schema->array_schema_->set_timestamp_range({0, 0}));
+
   rc = tiledb_array_schema_set_cell_order(ctx_, array_schema, layout);
   CHECK(rc == TILEDB_OK);
   rc = tiledb_array_schema_set_tile_order(ctx_, array_schema, layout);

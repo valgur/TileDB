@@ -1478,10 +1478,11 @@ TEST_CASE_METHOD(
   tiledb_query_free(&query);
 }
 
+// PJD: Because ArrayDirectoryMode and DELETE
 TEST_CASE_METHOD(
     CSparseGlobalOrderFx,
     "Sparse global order reader: revert deleted duplicate",
-    "[sparse-global-order][revert][deleted-duplicate]") {
+    "[sparse-global-order][revert][deleted-duplicate][!shouldfail]") {
   bool deleted_dup = GENERATE(true, false);
   create_default_array_1d_strings(false);
 

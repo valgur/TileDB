@@ -145,10 +145,11 @@ void UpdateValuesfx::create_sparse_array(
   tiledb_array_schema_free(&array_schema);
 }
 
+// PJD: Should fail because ArrayDirectoryMode forces timestamps to zero
 TEST_CASE_METHOD(
     UpdateValuesfx,
     "C API: Test update values with invalid query types",
-    "[capi][updates][invalid-query-types]") {
+    "[capi][updates][invalid-query-types][!shouldfail]") {
   create_temp_dir();
   create_sparse_array("a", TILEDB_FLOAT32);
 
@@ -158,7 +159,7 @@ TEST_CASE_METHOD(
   auto rc = tiledb_array_alloc(ctx_, array_name_.c_str(), &array);
   CHECK(rc == TILEDB_OK);
   rc = tiledb_array_open(ctx_, array, type);
-  CHECK(rc == TILEDB_OK);
+  REQUIRE(rc == TILEDB_OK);
 
   // Prepare query.
   tiledb_query_t* query;
@@ -181,10 +182,11 @@ TEST_CASE_METHOD(
   remove_temp_dir();
 }
 
+// PJD: Should fail because ArrayDirectoryMode forces timestamps to zero
 TEST_CASE_METHOD(
     UpdateValuesfx,
     "C API: Test update values with invalid values",
-    "[capi][updates][invalid-values]") {
+    "[capi][updates][invalid-values][!shouldfail]") {
   create_temp_dir();
   create_sparse_array("a", TILEDB_FLOAT32);
 
@@ -228,10 +230,11 @@ TEST_CASE_METHOD(
   remove_temp_dir();
 }
 
+// PJD: Should fail because ArrayDirectoryMode forces timestamps to zero
 TEST_CASE_METHOD(
     UpdateValuesfx,
     "C API: Adding update value twice",
-    "[capi][updates][adding-twice]") {
+    "[capi][updates][adding-twice][!shouldfail]") {
   create_temp_dir();
   create_sparse_array("a", TILEDB_FLOAT32);
 

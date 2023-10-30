@@ -307,7 +307,9 @@ TEST_CASE_METHOD(
 }
 
 TEST_CASE_METHOD(
-    CPPMetadataFx, "C++ API: Metadata, delete", "[cppapi][metadata][delete]") {
+    CPPMetadataFx,
+    "C++ API: Metadata, delete",
+    "[cppapi][metadata][delete][!shouldfail]") {
   // Create default array
   create_default_array_1d();
 

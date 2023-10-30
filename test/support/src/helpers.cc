@@ -469,7 +469,8 @@ void create_array(
     uint64_t capacity,
     bool allows_dups,
     bool serialize_array_schema,
-    const optional<std::vector<bool>>& nullable) {
+    const optional<std::vector<bool>>& nullable,
+    optional<uint64_t> timestamp) {
   // For easy reference
   auto dim_num = dim_names.size();
   auto attr_num = attr_names.size();
@@ -486,6 +487,12 @@ void create_array(
   tiledb_array_schema_t* array_schema;
   int rc = tiledb_array_schema_alloc(ctx, array_type, &array_schema);
   REQUIRE(rc == TILEDB_OK);
+
+  if (timestamp.has_value()) {
+    throw_if_not_ok(array_schema->array_schema_->set_timestamp_range(
+        {timestamp.value(), timestamp.value()}));
+  }
+
   rc = tiledb_array_schema_set_cell_order(ctx, array_schema, cell_order);
   REQUIRE(rc == TILEDB_OK);
   rc = tiledb_array_schema_set_tile_order(ctx, array_schema, tile_order);
@@ -569,7 +576,8 @@ void create_array(
     const std::vector<std::pair<tiledb_filter_type_t, int>>& compressors,
     tiledb_layout_t tile_order,
     tiledb_layout_t cell_order,
-    uint64_t capacity) {
+    uint64_t capacity,
+    optional<uint64_t> timestamp) {
   // For easy reference
   auto dim_num = dim_names.size();
   auto attr_num = attr_names.size();
@@ -586,6 +594,12 @@ void create_array(
   tiledb_array_schema_t* array_schema;
   int rc = tiledb_array_schema_alloc(ctx, array_type, &array_schema);
   REQUIRE(rc == TILEDB_OK);
+
+  if (timestamp.has_value()) {
+    throw_if_not_ok(array_schema->array_schema_->set_timestamp_range(
+        {timestamp.value(), timestamp.value()}));
+  }
+
   rc = tiledb_array_schema_set_cell_order(ctx, array_schema, cell_order);
   REQUIRE(rc == TILEDB_OK);
   rc = tiledb_array_schema_set_tile_order(ctx, array_schema, tile_order);

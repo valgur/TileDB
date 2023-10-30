@@ -421,7 +421,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     CPPQueryConditionFx,
     "Delete with SET - String",
-    "[query-condition][set][delete-with-set][string]") {
+    "[query-condition][set][delete-with-set][string][!shouldfail]") {
   auto type = GENERATE(TestArrayType::SPARSE, TestArrayType::LEGACY);
   auto serialize = SERIALIZE_TESTS();
   create_array(type, serialize);

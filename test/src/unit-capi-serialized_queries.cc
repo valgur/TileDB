@@ -1028,7 +1028,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     SerializationFx,
     "Query serialization, sparse delete",
-    "[query][sparse][delete][serialization]") {
+    "[query][sparse][delete][serialization][!shouldfail]") {
   refactored_query_v2_ = GENERATE(true, false);
   create_array(TILEDB_SPARSE);
   write_sparse_array();

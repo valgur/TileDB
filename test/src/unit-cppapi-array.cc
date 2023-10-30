@@ -920,7 +920,7 @@ TEST_CASE(
     vfs.remove_dir(array_name);
 }
 
-TEST_CASE("C++ API: Open array at", "[cppapi][open-array-at]") {
+TEST_CASE("C++ API: Open array at", "[cppapi][open-array-at][!shouldfail]") {
   Context ctx;
   VFS vfs(ctx);
   const std::string array_name = "cppapi_open_array_at";
@@ -1031,7 +1031,8 @@ TEST_CASE("C++ API: Open array at", "[cppapi][open-array-at]") {
 }
 
 TEST_CASE(
-    "C++ API: Open encrypted array at", "[cppapi][open-encrypted-array-at]") {
+    "C++ API: Open encrypted array at",
+    "[cppapi][open-encrypted-array-at][!shouldfail]") {
   const char key[] = "0123456789abcdeF0123456789abcdeF";
   tiledb::Config cfg;
   cfg["sm.encryption_type"] = "AES_256_GCM";

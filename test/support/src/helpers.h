@@ -279,6 +279,7 @@ int array_create_wrapper(
  * @param serialize_array_schema Whether to round-trip through serialization or
  * not.
  * @param nullable Whether the attributes are nullable or not.
+ * @param timestmap The timestmap to use for the array schema.
  */
 
 void create_array(
@@ -298,7 +299,8 @@ void create_array(
     uint64_t capacity,
     bool allows_dups = false,
     bool serialize_array_schema = false,
-    const optional<std::vector<bool>>& nullable = nullopt);
+    const optional<std::vector<bool>>& nullable = nullopt,
+    optional<uint64_t> timestamp = nullopt);
 
 /**
  * Helper method to create an encrypted array.
@@ -337,7 +339,8 @@ void create_array(
     const std::vector<std::pair<tiledb_filter_type_t, int>>& compressors,
     tiledb_layout_t tile_order,
     tiledb_layout_t cell_order,
-    uint64_t capacity);
+    uint64_t capacity,
+    optional<uint64_t> timestamp = nullopt);
 
 /**
  * Helper method to create an array schema.

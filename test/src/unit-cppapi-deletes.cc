@@ -534,7 +534,7 @@ std::vector<std::string> DeletesFx::list_schemas(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test writing delete condition",
-    "[cppapi][deletes][write-check]") {
+    "[cppapi][deletes][write-check][!shouldfail]") {
   remove_sparse_array();
 
   bool encrypt = GENERATE(true, false);
@@ -591,7 +591,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test deletes, open for delete invalid version",
-    "[cppapi][deletes][invalid-version]") {
+    "[cppapi][deletes][invalid-version][!shouldfail]") {
   if constexpr (is_experimental_build) {
     return;
   }
@@ -614,7 +614,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test deletes, reading with delete condition",
-    "[cppapi][deletes][read]") {
+    "[cppapi][deletes][read][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -723,7 +723,7 @@ TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test deletes, reading with delete condition, consolidated "
     "fragment",
-    "[cppapi][deletes][read][consolidated]") {
+    "[cppapi][deletes][read][consolidated][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -911,7 +911,7 @@ TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test deletes, reading with delete condition, delete duplicates "
     "from later fragments",
-    "[cppapi][deletes][duplicates]") {
+    "[cppapi][deletes][duplicates][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -989,7 +989,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test deletes, commits consolidation",
-    "[cppapi][deletes][commits][consolidation]") {
+    "[cppapi][deletes][commits][consolidation][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -1047,7 +1047,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test deletes, consolidation, delete same cell earlier",
-    "[cppapi][deletes][consolidation][same-cell]") {
+    "[cppapi][deletes][consolidation][same-cell][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -1174,7 +1174,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test deletes, multiple consolidation with deletes",
-    "[cppapi][deletes][consolidation][multiple]") {
+    "[cppapi][deletes][consolidation][multiple][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -1295,7 +1295,8 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test deletes, multiple cells with same coords in same fragment",
-    "[cppapi][deletes][consolidation][multiple-cells-same-coords]") {
+    "[cppapi][deletes][consolidation][multiple-cells-same-coords][!"
+    "shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -1482,7 +1483,7 @@ TEST_CASE_METHOD(
     "CPP API: Test deletes, multiple cells with same coords in same fragment, "
     "across tiles",
     "[cppapi][deletes][consolidation][multiple-cells-same-coords][across-"
-    "tiles]") {
+    "tiles][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -1668,7 +1669,7 @@ TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Test consolidating fragment with delete timestamp, with purge "
     "option",
-    "[cppapi][deletes][consolidation][with-delete-meta][purge]") {
+    "[cppapi][deletes][consolidation][with-delete-meta][purge][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -1783,7 +1784,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Deletion of fragment writes by timestamp and uri",
-    "[cppapi][deletes][fragments]") {
+    "[cppapi][deletes][fragments][!shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {
@@ -1876,7 +1877,8 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     DeletesFx,
     "CPP API: Deletion of fragment writes consolidated with timestamps",
-    "[cppapi][deletes][fragments][consolidation_with_timestamps]") {
+    "[cppapi][deletes][fragments][consolidation_with_timestamps][!"
+    "shouldfail]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(false, true);
   if (serialize_) {

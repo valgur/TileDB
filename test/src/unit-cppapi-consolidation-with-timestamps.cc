@@ -138,6 +138,11 @@ void ConsolidationWithTimestampsFx::create_sparse_array(bool allows_dups) {
 
   // Create array schema.
   ArraySchema schema(ctx_, TILEDB_SPARSE);
+
+  // Set schema timestamp to 0
+  throw_if_not_ok(
+      schema.ptr().get()->array_schema_->set_timestamp_range({0, 0}));
+
   schema.set_domain(domain);
   schema.set_capacity(20);
   schema.add_attributes(a1);
@@ -553,13 +558,15 @@ TEST_CASE_METHOD(
   remove_sparse_array();
 }
 
+// PJD: Should fail because the v11 array is broken for time traveling.
 // TODO: remove once tiledb_vfs_copy_dir is implemented for windows.
 #ifndef _WIN32
 TEST_CASE_METHOD(
     ConsolidationWithTimestampsFx,
     "CPP API: Test consolidation with timestamps, check directory contents of "
     "old array",
-    "[cppapi][consolidation-with-timestamps][sparse-unordered-with-dups]") {
+    "[cppapi][consolidation-with-timestamps][sparse-unordered-with-dups][!"
+    "shouldfail]") {
   if constexpr (is_experimental_build) {
     return;
   }

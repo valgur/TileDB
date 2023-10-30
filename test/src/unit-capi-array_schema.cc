@@ -2296,6 +2296,11 @@ TEST_CASE_METHOD(
   tiledb_array_t* array;
   rc = tiledb_array_alloc(ctx_, array_name.c_str(), &array);
   REQUIRE(rc == TILEDB_OK);
+
+  // Open at now so we include the evolved schema correctly.
+  rc = tiledb_array_set_open_timestamp_end(ctx_, array, now);
+  REQUIRE(rc == TILEDB_OK);
+
   rc = tiledb_array_open(ctx_, array, TILEDB_READ);
   REQUIRE(rc == TILEDB_OK);
   tiledb_array_schema_t* read_schema;
