@@ -221,8 +221,6 @@ void ConsolidationFx::create_dense_vector() {
   rc = tiledb_array_schema_alloc(ctx_, TILEDB_DENSE, &array_schema);
   CHECK(rc == TILEDB_OK);
 
-  throw_if_not_ok(array_schema->array_schema_->set_timestamp_range({0, 0}));
-
   rc = tiledb_array_schema_set_cell_order(ctx_, array_schema, TILEDB_ROW_MAJOR);
   CHECK(rc == TILEDB_OK);
   rc = tiledb_array_schema_set_tile_order(ctx_, array_schema, TILEDB_ROW_MAJOR);
@@ -320,8 +318,6 @@ void ConsolidationFx::create_dense_array() {
   tiledb_array_schema_t* array_schema;
   rc = tiledb_array_schema_alloc(ctx_, TILEDB_DENSE, &array_schema);
   CHECK(rc == TILEDB_OK);
-
-  throw_if_not_ok(array_schema->array_schema_->set_timestamp_range({0, 0}));
 
   rc = tiledb_array_schema_set_cell_order(ctx_, array_schema, TILEDB_ROW_MAJOR);
   CHECK(rc == TILEDB_OK);
