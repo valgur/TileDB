@@ -1227,42 +1227,27 @@ void ArrayDirectory::compute_array_schema_uris(
     return;
   }
 
-  // Create a vector of timestamps, URI pairs.
-  std::vector<std::pair<uint64_t, URI>> ts_uris;
+  // Get our list of timestamp URIs
+  std::vector<URI> uris;
+  uint64_t num_uris = 0
   for (auto& uri : array_schema_dir_uris) {
     if (uri.last_path_part() == constants::array_enumerations_dir_name) {
       continue;
     }
-
-    std::pair<uint64_t, uint64_t> timestamp_range;
-    throw_if_not_ok(utils::parse::get_timestamp_range(uri, &timestamp_range));
-
-    ts_uris.push_back({timestamp_range.second, uri});
+    uris.append(uri);
+    num_uris += 1;
   }
 
-  std::sort(ts_uris.begin(), ts_uris.end(), [](auto lhs, auto rhs) {
-    return lhs.first < rhs.first;
-  });
-
-  std::vector<URI> uris;
-  for (auto [ts, uri] : ts_uris) {
-    // If we're in read mode and time traveling, only include schemas created
-    // before the end timestamp.
-    if (mode_ == ArrayDirectoryMode::READ && ts > timestamp_end_) {
-      continue;
-    }
-
-    uris.push_back(uri);
-  }
-
-  // Copy the releavant schema URIs to our list.
-  std::copy(uris.begin(), uris.end(), std::back_inserter(array_schema_uris_));
+  compute_filtered_uris(true, uris, {});
 
   // Throw an exception if we time traveled to before the first schema.
-  if (array_schema_uris_.size() == 0 && ts_uris.size() > 0) {
+  if (uris.size() == 0 && num_uris > 0) {
     throw ArrayDirectoryException(
         "Error time traveling before the first schema existed.");
   }
+
+  // Copy the filtered schema URIs.
+  std::copy(uris.begin(), uris.end(), std::back_inserter(array_schema_uris_));
 }
 
 bool ArrayDirectory::is_vacuum_file(const URI& uri) const {
