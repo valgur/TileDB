@@ -483,20 +483,17 @@ ArrayDirectory::filtered_fragment_uris(const bool full_overlap_only) const {
   }
 
   // Compute filtered fragment URIs
-  auto&& [st2, fragment_filtered_uris] = compute_filtered_uris(
+  auto fragment_filtered_uris = compute_filtered_uris(
       full_overlap_only,
       unfiltered_fragment_uris_,
       fragment_uris_to_vacuum.value());
-  if (!st2.ok()) {
-    throw std::logic_error(st.message());
-  }
 
   return FilteredFragmentUris(
       std::move(fragment_uris_to_vacuum.value()),
       std::move(commit_uris_to_vacuum),
       std::move(commit_uris_to_ignore),
       std::move(fragment_vac_uris_to_vacuum.value()),
-      std::move(fragment_filtered_uris.value()));
+      std::move(fragment_filtered_uris));
 }
 
 const std::vector<URI>& ArrayDirectory::fragment_meta_uris() const {
@@ -873,10 +870,9 @@ void ArrayDirectory::load_array_meta_uris() {
       std::move(array_meta_vac_uris_to_vacuum.value());
 
   // Compute filtered array metadata URIs
-  auto&& [st2, array_meta_filtered_uris] = compute_filtered_uris(
+  auto array_meta_filtered_uris = compute_filtered_uris(
       true, array_meta_dir_uris, array_meta_uris_to_vacuum_);
-  throw_if_not_ok(st2);
-  array_meta_uris_ = std::move(array_meta_filtered_uris.value());
+  array_meta_uris_ = std::move(array_meta_filtered_uris);
   array_meta_dir_uris.clear();
 }
 
@@ -1145,7 +1141,7 @@ ArrayDirectory::compute_uris_to_vacuum(
   return {Status::Ok(), uris_to_vacuum, vac_uris_to_vacuum};
 }
 
-tuple<Status, optional<std::vector<TimestampedURI>>>
+std::vector<TimestampedURI>
 ArrayDirectory::compute_filtered_uris(
     const bool full_overlap_only,
     const std::vector<URI>& uris,
@@ -1154,7 +1150,7 @@ ArrayDirectory::compute_filtered_uris(
 
   // Do nothing if there are not enough URIs
   if (uris.empty()) {
-    return {Status::Ok(), filtered_uris};
+    return filtered_uris;
   }
 
   // Get the URIs that must be ignored
@@ -1205,7 +1201,7 @@ ArrayDirectory::compute_filtered_uris(
   // Sort the names based on the timestamps
   std::sort(filtered_uris.begin(), filtered_uris.end());
 
-  return {Status::Ok(), filtered_uris};
+  return filtered_uris;
 }
 
 void ArrayDirectory::compute_array_schema_uris(

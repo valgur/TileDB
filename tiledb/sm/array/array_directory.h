@@ -758,7 +758,7 @@ class ArrayDirectory {
    * @param to_ignore The URIs to ignore (because they are vacuumed).
    * @return Status, vector of filtered timestamped URIs.
    */
-  tuple<Status, optional<std::vector<TimestampedURI>>> compute_filtered_uris(
+  std::vector<TimestampedURI> compute_filtered_uris(
       const bool full_overlap_only,
       const std::vector<URI>& uris,
       const std::vector<URI>& to_ignore) const;
