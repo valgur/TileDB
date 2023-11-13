@@ -57,7 +57,8 @@ enum class ArrayDirectoryMode {
   SCHEMA_ONLY,      // Used when we only load schemas.
   COMMITS,          // Used for opening the array directory for commits
                     // consolidation or vacuuming.
-  VACUUM_FRAGMENTS  // Used when opening the array for fragment vacuuming.
+  VACUUM_FRAGMENTS, // Used when opening the array for fragment vacuuming.
+  UPDATE_DELETE     // Used when opening the array for updates and deletes.
 };
 
 // Forward declaration
