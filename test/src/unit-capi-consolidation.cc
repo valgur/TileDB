@@ -6592,7 +6592,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     ConsolidationFx,
     "C API: Test vacuuming and timestamps",
-    "[capi][vacuuming][timestamps]") {
+    "[capi][consolidation][vacuuming][timestamps]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(true, false);
   if (serialize_) {
