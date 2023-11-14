@@ -1234,18 +1234,25 @@ void ArrayDirectory::compute_array_schema_uris(
     num_uris += 1;
   }
 
-  auto filtered_uris = compute_filtered_uris(true, uris, {});
+  std::vector<TimestampedURI> filtered_uris;
+  if (mode_ == ArrayDirectoryMode::READ) {
+    filtered_uris = compute_filtered_uris(true, uris, {});
 
-  // Throw an exception if we time traveled to before the first schema.
-  if (filtered_uris.empty() && num_uris > 0) {
-    throw ArrayDirectoryException(
-        "Error time traveling before the first schema existed.");
+    // Throw an exception if we time traveled to before the first schema.
+    if (filtered_uris.empty() && num_uris > 0) {
+      throw ArrayDirectoryException(
+          "Error time traveling before the first schema existed.");
+    }
+
+    // Copy the filtered schema URIs.
+    for (auto& uri : filtered_uris) {
+      array_schema_uris_.push_back(uri.uri());
+    }
+  } else {
+    std::copy(uris.begin(), uris.end(), std::back_inserter(array_schema_uris_));
   }
 
-  // Copy the filtered schema URIs.
-  for (auto& uri : filtered_uris) {
-    array_schema_uris_.push_back(uri.uri());
-  }
+
 }
 
 bool ArrayDirectory::is_vacuum_file(const URI& uri) const {
