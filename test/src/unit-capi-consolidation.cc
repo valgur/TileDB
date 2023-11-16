@@ -34,7 +34,6 @@
 #include "test/support/src/helpers.h"
 #include "tiledb/common/stdx_string.h"
 #include "tiledb/sm/c_api/tiledb.h"
-#include "tiledb/sm/c_api/tiledb_struct_def.h"
 #include "tiledb/sm/enums/encryption_type.h"
 #include "tiledb/sm/misc/tdb_time.h"
 #include "tiledb/storage_format/uri/parse_uri.h"
@@ -78,6 +77,9 @@ struct ConsolidationFx {
   tiledb_encryption_type_t encryption_type_ = TILEDB_NO_ENCRYPTION;
   const char* encryption_key_ = nullptr;
 
+  // A time-zero based on the current clock
+  uint64_t now_ms_;
+
   // Serialization parameters
   bool serialize_ = false;
   bool refactored_query_v2_ = false;
@@ -94,7 +96,7 @@ struct ConsolidationFx {
   void create_sparse_array();
   void create_sparse_heterogeneous_array();
   void create_sparse_string_array();
-  void write_dense_vector_4_fragments(uint64_t timestamp = 0);
+  void write_dense_vector_4_fragments(uint64_t timestamp);
   void write_dense_vector_4_fragments_not_coinciding();
   void write_dense_vector_4_fragments_not_coinciding_with_gaps();
   void write_dense_vector_consolidatable_1();
@@ -188,6 +190,9 @@ ConsolidationFx::ConsolidationFx() {
   REQUIRE(tiledb_ctx_alloc(nullptr, &ctx_) == TILEDB_OK);
   vfs_ = nullptr;
   REQUIRE(tiledb_vfs_alloc(ctx_, nullptr, &vfs_) == TILEDB_OK);
+  now_ms_ = tiledb::sm::utils::time::timestamp_now_ms();
+  REQUIRE(now_ms_ > 0);
+  std::cerr << "NOW MS: " << now_ms_ << std::endl;
 }
 
 ConsolidationFx::~ConsolidationFx() {
@@ -220,7 +225,6 @@ void ConsolidationFx::create_dense_vector() {
   tiledb_array_schema_t* array_schema;
   rc = tiledb_array_schema_alloc(ctx_, TILEDB_DENSE, &array_schema);
   CHECK(rc == TILEDB_OK);
-
   rc = tiledb_array_schema_set_cell_order(ctx_, array_schema, TILEDB_ROW_MAJOR);
   CHECK(rc == TILEDB_OK);
   rc = tiledb_array_schema_set_tile_order(ctx_, array_schema, TILEDB_ROW_MAJOR);
@@ -318,7 +322,6 @@ void ConsolidationFx::create_dense_array() {
   tiledb_array_schema_t* array_schema;
   rc = tiledb_array_schema_alloc(ctx_, TILEDB_DENSE, &array_schema);
   CHECK(rc == TILEDB_OK);
-
   rc = tiledb_array_schema_set_cell_order(ctx_, array_schema, TILEDB_ROW_MAJOR);
   CHECK(rc == TILEDB_OK);
   rc = tiledb_array_schema_set_tile_order(ctx_, array_schema, TILEDB_ROW_MAJOR);
@@ -2566,25 +2569,25 @@ void ConsolidationFx::read_dense_vector(uint64_t timestamp) {
   // Correct buffer
   int c_a[410];
   for (int i = 0; i < 200; ++i) {
-    if (timestamp >= 1)
+    if (timestamp >= now_ms_ + 1)
       c_a[i] = i;
     else
       c_a[i] = -2147483648;
   }
   for (int i = 200; i < 250; ++i) {
-    if (timestamp >= 2)
+    if (timestamp >= now_ms_ + 2)
       c_a[i] = i;
     else
       c_a[i] = -2147483648;
   }
   for (int i = 250; i < 310; ++i) {
-    if (timestamp >= 3)
+    if (timestamp >= now_ms_ + 3)
       c_a[i] = i;
     else
       c_a[i] = -2147483648;
   }
   for (int i = 310; i < 410; ++i) {
-    if (timestamp == 0 || timestamp >= 4)
+    if (timestamp == now_ms_ || timestamp >= now_ms_ + 4)
       c_a[i] = i;
     else
       c_a[i] = -2147483648;
@@ -2618,7 +2621,7 @@ void ConsolidationFx::read_dense_vector(uint64_t timestamp) {
     tiledb_config_free(&cfg);
   }
   rc = tiledb_array_open(ctx_, array, TILEDB_READ);
-  check_tiledb_ok(ctx_, rc);
+  REQUIRE(rc == TILEDB_OK);
 
   // Preparation
   uint64_t subarray[] = {1, 410};
@@ -2642,10 +2645,16 @@ void ConsolidationFx::read_dense_vector(uint64_t timestamp) {
   rc = tiledb_query_get_status(ctx_, query, &status);
   CHECK(status == TILEDB_COMPLETED);
 
+  std::cerr << "READ AT: " << timestamp << std::endl;
+
   // Check buffers
   CHECK(sizeof(c_a) == a_size);
-  for (int i = 0; i < 410; ++i)
+  for (int i = 0; i < 410; ++i) {
+    if (a[i] != c_a[i]) {
+      throw StatusException("Ohai", "Ohblah");
+    }
     CHECK(a[i] == c_a[i]);
+  }
 
   // Close array
   rc = tiledb_array_close(ctx_, array);
@@ -4688,6 +4697,7 @@ TEST_CASE_METHOD(
 }
 
 int ConsolidationFx::get_dir_num(const char* path, void* data) {
+  std::cerr << "PATH: " << path << std::endl;
   auto data_struct = (ConsolidationFx::get_num_struct*)data;
   auto ctx = data_struct->ctx;
   auto vfs = data_struct->vfs;
@@ -4818,7 +4828,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][config]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -4952,7 +4962,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][adv-1]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5010,7 +5020,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][adv-2]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5068,7 +5078,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][adv-3]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5126,7 +5136,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][adv-4]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5184,7 +5194,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][adv-5]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5242,7 +5252,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][adv-6]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5300,7 +5310,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][adv-7]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5358,7 +5368,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][adv-8]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5542,7 +5552,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][buffer-size]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -5599,7 +5609,7 @@ TEST_CASE_METHOD(
   encryption_type_ = TILEDB_AES_256_GCM;
   encryption_key_ = "0123456789abcdeF0123456789abcdeF";
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* cfg = nullptr;
@@ -5664,7 +5674,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][adv][overwritten-no-del]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
   read_dense_vector();
 
   tiledb_config_t* config = nullptr;
@@ -6045,7 +6055,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][time-traveling]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
 
   tiledb_config_t* cfg;
   tiledb_error_t* err = nullptr;
@@ -6078,9 +6088,9 @@ TEST_CASE_METHOD(
 
   // This will properly test time traveling at timestamps within the
   // consolidated fragment interval
-  read_dense_vector(1);
-  read_dense_vector(2);
-  read_dense_vector(3);
+  read_dense_vector(now_ms_ + 1);
+  read_dense_vector(now_ms_ + 2);
+  read_dense_vector(now_ms_ + 3);
   read_dense_vector();
 
   rc = tiledb_array_vacuum(ctx_, DENSE_VECTOR_NAME, NULL);
@@ -6091,7 +6101,7 @@ TEST_CASE_METHOD(
   tiledb_array_t* array;
   rc = tiledb_array_alloc(ctx_, DENSE_VECTOR_NAME, &array);
   CHECK(rc == TILEDB_OK);
-  rc = tiledb_array_set_open_timestamp_end(ctx_, array, 1);
+  rc = tiledb_array_set_open_timestamp_end(ctx_, array, now_ms_ + 1);
   CHECK(rc == TILEDB_OK);
 
   rc = tiledb_array_open(ctx_, array, TILEDB_READ);
@@ -6140,7 +6150,7 @@ TEST_CASE_METHOD(
     "[capi][consolidation][fragment-meta]") {
   remove_dense_vector();
   create_dense_vector();
-  write_dense_vector_4_fragments();
+  write_dense_vector_4_fragments(now_ms_);
 
   // Configuration for consolidating fragment metadata
   tiledb_config_t* config = nullptr;
@@ -6169,13 +6179,13 @@ TEST_CASE_METHOD(
   CHECK(rc == TILEDB_OK);
   CHECK(data.num == 1);
 
-  read_dense_vector(1);
-  read_dense_vector(2);
-  read_dense_vector(3);
-  read_dense_vector();
+  read_dense_vector(now_ms_ + 1);
+  read_dense_vector(now_ms_ + 2);
+  read_dense_vector(now_ms_ + 3);
+  read_dense_vector(UINT64_MAX);
 
   // Write the dense fragments again
-  write_dense_vector_4_fragments(4);
+  write_dense_vector_4_fragments(now_ms_ + 4);
 
   // Check
   data = {ctx_, vfs_, 0};
@@ -6183,14 +6193,14 @@ TEST_CASE_METHOD(
   CHECK(rc == TILEDB_OK);
   CHECK(data.num == 8);
 
-  read_dense_vector(1);
-  read_dense_vector(2);
-  read_dense_vector(3);
-  read_dense_vector(4);
-  read_dense_vector(5);
-  read_dense_vector(6);
-  read_dense_vector(7);
-  read_dense_vector(8);
+  read_dense_vector(now_ms_ + 1);
+  read_dense_vector(now_ms_ + 2);
+  read_dense_vector(now_ms_ + 3);
+  read_dense_vector(now_ms_ + 4);
+  read_dense_vector(now_ms_ + 5);
+  read_dense_vector(now_ms_ + 6);
+  read_dense_vector(now_ms_ + 7);
+  read_dense_vector(now_ms_ + 8);
 
   // Consolidate - this will consolidate only the fragment metadata
   rc = tiledb_array_consolidate(ctx_, DENSE_VECTOR_NAME, config);
@@ -6213,14 +6223,14 @@ TEST_CASE_METHOD(
   rc = tiledb_vfs_ls(ctx_, vfs_, DENSE_VECTOR_FRAG_DIR, &get_dir_num, &data);
   CHECK(rc == TILEDB_OK);
   CHECK(data.num == 8);
-  read_dense_vector(1);
-  read_dense_vector(2);
-  read_dense_vector(3);
-  read_dense_vector(4);
-  read_dense_vector(5);
-  read_dense_vector(6);
-  read_dense_vector(7);
-  read_dense_vector(8);
+  read_dense_vector(now_ms_ + 1);
+  read_dense_vector(now_ms_ + 2);
+  read_dense_vector(now_ms_ + 3);
+  read_dense_vector(now_ms_ + 4);
+  read_dense_vector(now_ms_ + 5);
+  read_dense_vector(now_ms_ + 6);
+  read_dense_vector(now_ms_ + 7);
+  read_dense_vector(now_ms_ + 8);
 
   // Test wrong vacuum mode
   rc = tiledb_config_set(config, "sm.vacuum.mode", "foo", &error);
@@ -6244,14 +6254,14 @@ TEST_CASE_METHOD(
   CHECK(data.num == 1);
 
   // Read
-  read_dense_vector(1);
-  read_dense_vector(2);
-  read_dense_vector(3);
-  read_dense_vector(4);
-  read_dense_vector(5);
-  read_dense_vector(6);
-  read_dense_vector(7);
-  read_dense_vector(8);
+  read_dense_vector(now_ms_ + 1);
+  read_dense_vector(now_ms_ + 2);
+  read_dense_vector(now_ms_ + 3);
+  read_dense_vector(now_ms_ + 4);
+  read_dense_vector(now_ms_ + 5);
+  read_dense_vector(now_ms_ + 6);
+  read_dense_vector(now_ms_ + 7);
+  read_dense_vector(now_ms_ + 8);
 
   // Error for wrong consolidation mode
   rc = tiledb_config_set(config, "sm.consolidation.mode", "foo", &error);
@@ -6588,7 +6598,7 @@ TEST_CASE_METHOD(
 TEST_CASE_METHOD(
     ConsolidationFx,
     "C API: Test vacuuming and timestamps",
-    "[capi][consolidation][vacuuming][timestamps]") {
+    "[capi][vacuuming][timestamps]") {
 #ifdef TILEDB_SERIALIZATION
   serialize_ = GENERATE(true, false);
   if (serialize_) {

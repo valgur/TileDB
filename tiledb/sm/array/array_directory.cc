@@ -488,6 +488,11 @@ ArrayDirectory::filtered_fragment_uris(const bool full_overlap_only) const {
       unfiltered_fragment_uris_,
       fragment_uris_to_vacuum.value());
 
+  std::cerr << "FILTERED FRAGMENT URIS:" << std::endl;
+  for (auto& uri : fragment_filtered_uris) {
+    std::cerr << "  " << uri.uri().to_string() << std::endl;
+  }
+
   return FilteredFragmentUris(
       std::move(fragment_uris_to_vacuum.value()),
       std::move(commit_uris_to_vacuum),
@@ -1020,12 +1025,26 @@ bool ArrayDirectory::timestamps_overlap(
     // True if the fragment falls fully within start and end times
     auto full_overlap = fragment_timestamp_start >= timestamp_start_ &&
                         fragment_timestamp_end <= timestamp_end_;
+    std::stringstream ss;
+    ss << "FULL OVERLAP: "
+      << timestamp_start_ << " : " << timestamp_end_
+      << " <=> "
+      << fragment_timestamp_start << " : " << fragment_timestamp_end
+      << " = " << (full_overlap ? "true" : "false") << std::endl;
+    std::cerr << ss.str();
     return full_overlap;
   } else {
     // When consolidated fragment has timestamps, true if there is even partial
     // overlap
     auto any_overlap = fragment_timestamp_start <= timestamp_end_ &&
                        timestamp_start_ <= fragment_timestamp_end;
+    std::stringstream ss;
+    ss << "PARTIAL OVERLAP: "
+      << timestamp_start_ << " : " << timestamp_end_
+      << " <=> "
+      << fragment_timestamp_start << " : " << fragment_timestamp_end
+      << " = " << (any_overlap ? "true" : "false") << std::endl;
+    std::cerr << ss.str();
     return any_overlap;
   }
 }
@@ -1234,9 +1253,25 @@ void ArrayDirectory::compute_array_schema_uris(
     num_uris += 1;
   }
 
+  std::cerr << "ARRAY DIRECTORY MODE: " << static_cast<uint32_t>(mode_) << std::endl;
+
   std::vector<TimestampedURI> filtered_uris;
   if (mode_ == ArrayDirectoryMode::READ) {
+    std::stringstream ss;
+    ss << "SCHEMA URIS:" << std::endl;
+    for (auto& uri : uris) {
+      ss << "  " << uri.to_string() << std::endl;
+    }
+    std::cerr << ss.str();
+
     filtered_uris = compute_filtered_uris(true, uris, {});
+
+    ss.clear();
+    ss << "FILTERED SCHEMA URIS:" << std::endl;
+    for (auto& uri : filtered_uris) {
+      ss << "  " << uri.uri().to_string() << std::endl;
+    }
+    std::cerr << ss.str();
 
     // Throw an exception if we time traveled to before the first schema.
     if (filtered_uris.empty() && num_uris > 0) {
